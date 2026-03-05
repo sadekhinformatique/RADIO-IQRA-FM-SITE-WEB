@@ -1,0 +1,21 @@
+{
+  "name": "RADIO IQRA FM",
+  "short_name": "IQRA FM",
+  "description": "La Voix du Saint Coran - Radio Islamique du Burkina Faso",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#006400",
+  "icons": [
+    {
+      "src": "https://radioiqraburkina.com/wp-content/uploads/2025/09/2732x2732-1.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://radioiqraburkina.com/wp-content/uploads/2025/09/2732x2732-1.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
