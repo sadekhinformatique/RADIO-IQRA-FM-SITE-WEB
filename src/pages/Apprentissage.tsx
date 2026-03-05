@@ -81,7 +81,7 @@ export default function Apprentissage() {
     <div className="pt-32 pb-20 min-h-screen bg-stone-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <motion.h1 
+          <motion.h1
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-5xl font-serif font-bold text-stone-900 mb-4"
@@ -115,36 +115,24 @@ export default function Apprentissage() {
           </div>
         )}
 
-        <div className="bg-white rounded-3xl p-12 shadow-xl border border-stone-100 flex flex-col lg:flex-row items-center gap-12 overflow-hidden relative">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-islamic-green/5 rounded-full -mr-48 -mt-48 blur-3xl" />
-          <div className="lg:w-1/2 relative z-10">
-            <h2 className="text-4xl font-serif font-bold text-stone-800 mb-6">Bibliothèque Audio & Vidéo</h2>
-            <p className="text-lg text-stone-600 leading-relaxed mb-8">
-              Accédez à des centaines d'heures de cours, de conférences et de récitations enregistrées par nos meilleurs oustaz et imams. Apprenez à votre rythme, où que vous soyez.
+        <div className="bg-white rounded-3xl p-8 lg:p-12 shadow-xl border border-stone-100 relative overflow-hidden flex flex-col">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-islamic-green/5 rounded-full -mr-48 -mt-48 blur-3xl opacity-50" />
+
+          <div className="relative z-10 mb-8 text-center max-w-3xl mx-auto">
+            <h2 className="text-4xl font-serif font-bold text-stone-800 mb-6">Plateforme d'Apprentissage (audio.quran.com)</h2>
+            <p className="text-lg text-stone-600 leading-relaxed">
+              Écoutez, lisez et mémorisez le Saint Coran avec notre intégration complète. Accédez aux meilleures récitations et traductions directement depuis notre espace d'apprentissage.
             </p>
-            <div className="flex flex-wrap gap-4">
-              <button className="bg-islamic-green text-white px-8 py-4 rounded-2xl font-bold shadow-lg shadow-islamic-green/20 hover:bg-islamic-gold transition-all flex items-center gap-3">
-                <Play size={20} fill="currentColor" />
-                Accéder aux Vidéos
-              </button>
-              <button className="bg-stone-100 text-stone-800 px-8 py-4 rounded-2xl font-bold hover:bg-stone-200 transition-all">
-                Télécharger les PDF
-              </button>
-            </div>
           </div>
-          <div className="lg:w-1/2 grid grid-cols-2 gap-6 relative z-10">
-            <div className="aspect-video bg-stone-100 rounded-2xl overflow-hidden border border-stone-200 shadow-inner flex items-center justify-center">
-              <Play size={48} className="text-islamic-green/20" />
-            </div>
-            <div className="aspect-video bg-stone-100 rounded-2xl overflow-hidden border border-stone-200 shadow-inner flex items-center justify-center">
-              <Play size={48} className="text-islamic-green/20" />
-            </div>
-            <div className="aspect-video bg-stone-100 rounded-2xl overflow-hidden border border-stone-200 shadow-inner flex items-center justify-center">
-              <Play size={48} className="text-islamic-green/20" />
-            </div>
-            <div className="aspect-video bg-stone-100 rounded-2xl overflow-hidden border border-stone-200 shadow-inner flex items-center justify-center">
-              <Play size={48} className="text-islamic-green/20" />
-            </div>
+
+          <div className="relative z-10 w-full rounded-2xl overflow-hidden border border-stone-200 shadow-inner bg-stone-50" style={{ height: '700px' }}>
+            <iframe
+              src="https://quran.com/"
+              title="Programme d'apprentissage du Coran"
+              className="w-full h-full border-0"
+              allow="autoplay; fullscreen"
+              loading="lazy"
+            ></iframe>
           </div>
         </div>
       </div>
