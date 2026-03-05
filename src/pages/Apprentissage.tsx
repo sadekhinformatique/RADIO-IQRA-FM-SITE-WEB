@@ -5,7 +5,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { BookOpen, Sparkles, Heart, Globe, Play, ChevronRight, Book, Loader2 } from 'lucide-react';
+import { BookOpen, Sparkles, Heart, Globe, Play, ChevronRight, Book, Loader2, X, Languages } from 'lucide-react';
 import { supabase, Lesson } from '../lib/supabase';
 
 const LessonCard = ({ title, level, duration, description, icon: Icon }: { title: string, level: string, duration: string, description: string, icon: any }) => (
@@ -41,6 +41,9 @@ const QuranPlayer = () => {
   const [selectedSurah, setSelectedSurah] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isReading, setIsReading] = useState(false);
+  const [readingData, setReadingData] = useState<any>(null);
+  const [loadingReading, setLoadingReading] = useState(false);
   const audioRef = React.useRef<HTMLAudioElement>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -73,6 +76,21 @@ const QuranPlayer = () => {
     if (audioRef.current) {
       audioRef.current.src = `https://cdn.islamic.network/quran/audio-surah/128/${selectedReciter}/${surah.number}.mp3`;
       audioRef.current.play();
+    }
+  };
+
+  const handleReadSurah = async (surahNumber: number) => {
+    setLoadingReading(true);
+    setIsReading(true);
+    try {
+      const response = await fetch('/quran.json');
+      const data = await response.json();
+      const surah = data.sourates.find((s: any) => s.position === surahNumber);
+      setReadingData(surah);
+    } catch (err) {
+      console.error("Failed to fetch reading data", err);
+    } finally {
+      setLoadingReading(false);
     }
   };
 
@@ -129,8 +147,8 @@ const QuranPlayer = () => {
                   key={r.identifier}
                   onClick={() => setSelectedReciter(r.identifier)}
                   className={`w-full text-left px-4 py-3 rounded-xl transition-all flex items-center gap-3 group ${selectedReciter === r.identifier
-                      ? 'bg-islamic-green text-white shadow-lg shadow-islamic-green/20'
-                      : 'hover:bg-white text-stone-600'
+                    ? 'bg-islamic-green text-white shadow-lg shadow-islamic-green/20'
+                    : 'hover:bg-white text-stone-600'
                     }`}
                 >
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${selectedReciter === r.identifier ? 'bg-white/20' : 'bg-stone-200 text-stone-500'
@@ -164,8 +182,8 @@ const QuranPlayer = () => {
                 key={s.number}
                 onClick={() => handlePlaySurah(s)}
                 className={`flex items-center justify-between p-4 rounded-2xl border transition-all text-left group ${selectedSurah?.number === s.number
-                    ? 'border-islamic-gold bg-islamic-gold/5 shadow-inner'
-                    : 'border-stone-100 hover:border-islamic-green hover:shadow-md'
+                  ? 'border-islamic-gold bg-islamic-gold/5 shadow-inner'
+                  : 'border-stone-100 hover:border-islamic-green hover:shadow-md'
                   }`}
               >
                 <div className="flex items-center gap-4">
@@ -178,9 +196,18 @@ const QuranPlayer = () => {
                     <p className="text-[10px] text-stone-400 uppercase tracking-widest">{s.englishNameTranslation}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-lg font-serif text-stone-700">{s.name}</p>
-                  <p className="text-[10px] text-stone-400">{s.numberOfAyahs} Versets</p>
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <p className="text-lg font-serif text-stone-700">{s.name}</p>
+                    <p className="text-[10px] text-stone-400">{s.numberOfAyahs} Versets</p>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleReadSurah(s.number); }}
+                    className="p-2 text-stone-400 hover:text-islamic-gold transition-colors"
+                    title="Lire la sourate"
+                  >
+                    <Book size={20} />
+                  </button>
                 </div>
               </button>
             ))}
@@ -209,6 +236,16 @@ const QuranPlayer = () => {
         </div>
 
         <div className="flex items-center gap-6 z-10">
+          {selectedSurah && (
+            <button
+              onClick={() => handleReadSurah(selectedSurah.number)}
+              className="text-stone-400 hover:text-white flex flex-col items-center gap-1 transition-all"
+              title="Lire la sourate"
+            >
+              <BookOpen size={20} />
+              <span className="text-[10px] uppercase font-bold tracking-tighter">Lire</span>
+            </button>
+          )}
           <button className="text-stone-400 hover:text-white transition-colors" title="Précédent (Bientôt)">
             <Play size={24} className="rotate-180" />
           </button>
@@ -240,6 +277,74 @@ const QuranPlayer = () => {
           onPause={() => setIsPlaying(false)}
         />
       </div>
+
+      {/* Full-Screen Reading Overlay */}
+      {isReading && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-[100] bg-stone-900/95 backdrop-blur-md flex flex-col"
+        >
+          <div className="p-6 md:p-8 flex justify-between items-center text-white border-b border-white/10">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 bg-islamic-green rounded-full flex items-center justify-center">
+                <Book size={20} />
+              </div>
+              <div>
+                <h3 className="text-2xl font-serif font-bold">
+                  {loadingReading ? "Chargement..." : `${readingData?.nom_phonetique} (${readingData?.englishNameTranslation})`}
+                </h3>
+                <p className="text-xs text-stone-400 uppercase tracking-widest">
+                  {loadingReading ? "Veuillez patienter" : `Sourate ${readingData?.position} - ${readingData?.nom}`}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsReading(false)}
+              className="w-12 h-12 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all"
+            >
+              <X size={24} />
+            </button>
+          </div>
+
+          <div className="flex-grow overflow-y-auto p-6 md:p-12">
+            <div className="max-w-4xl mx-auto space-y-12">
+              {loadingReading ? (
+                <div className="flex flex-col items-center justify-center py-40">
+                  <Loader2 className="w-16 h-16 text-islamic-green animate-spin mb-4" />
+                  <p className="text-white font-medium">Récupération du texte sacré...</p>
+                </div>
+              ) : (
+                readingData?.versets.map((v: any) => (
+                  <div key={v.position} className="flex flex-col gap-6 relative group">
+                    <div className="absolute -left-8 top-0 text-stone-600 font-mono text-sm opacity-50 group-hover:opacity-100 transition-opacity">
+                      {v.position_ds_sourate}
+                    </div>
+                    <div className="text-right rtl">
+                      <p className="text-4xl md:text-5xl leading-[1.8] text-islamic-gold text-right font-serif" dir="rtl">
+                        {v.text_arabe}
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-4">
+                      <div className="w-6 h-6 rounded bg-islamic-green/10 flex items-center justify-center text-[10px] text-islamic-green font-bold shrink-0 mt-1">
+                        FR
+                      </div>
+                      <p className="text-xl text-stone-300 leading-relaxed italic">
+                        {v.text}
+                      </p>
+                    </div>
+                    <div className="w-full h-px bg-white/5 mt-4" />
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="p-8 bg-stone-900 border-t border-white/10 flex justify-center text-stone-500 text-sm">
+            Lecteur Coranique Radio Iqra - Traduction & Texte Standard
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 };
