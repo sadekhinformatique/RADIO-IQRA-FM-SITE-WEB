@@ -44,6 +44,8 @@ const QuranPlayer = () => {
   const [isReading, setIsReading] = useState(false);
   const [readingData, setReadingData] = useState<any>(null);
   const [loadingReading, setLoadingReading] = useState(false);
+  const [verseSearchQuery, setVerseSearchQuery] = useState('');
+  const [readingLanguage, setReadingLanguage] = useState<'fr' | 'en' | 'ar'>('fr');
   const audioRef = React.useRef<HTMLAudioElement>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -87,6 +89,21 @@ const QuranPlayer = () => {
       const data = await response.json();
       const surah = data.sourates.find((s: any) => s.position === surahNumber);
       setReadingData(surah);
+
+      // If language is English, we might need to fetch from the Al-Quran API
+      if (readingLanguage === 'en') {
+        const enRes = await fetch(`https://alquran-api.pages.dev/api/quran/surah/${surahNumber}?lang=en`);
+        if (enRes.ok) {
+          const enData = await enRes.json();
+          // Map English translations to the existing structure
+          const updatedSurah = { ...surah };
+          updatedSurah.versets = updatedSurah.versets.map((v: any, idx: number) => ({
+            ...v,
+            text_en: enData.verses[idx]?.translation || "Translation not available"
+          }));
+          setReadingData(updatedSurah);
+        }
+      }
     } catch (err) {
       console.error("Failed to fetch reading data", err);
     } finally {
@@ -109,6 +126,13 @@ const QuranPlayer = () => {
     r.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     r.englishName.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const filteredVerses = readingData?.versets.filter((v: any) => {
+    const query = verseSearchQuery.toLowerCase();
+    if (readingLanguage === 'fr') return v.text.toLowerCase().includes(query) || v.text_arabe.includes(query);
+    if (readingLanguage === 'en') return (v.text_en?.toLowerCase().includes(query)) || v.text_arabe.includes(query);
+    return v.text_arabe.includes(query);
+  });
 
   return (
     <div className="bg-white rounded-3xl shadow-xl border border-stone-100 overflow-hidden flex flex-col h-[800px]">
@@ -290,49 +314,117 @@ const QuranPlayer = () => {
               <div className="w-10 h-10 bg-islamic-green rounded-full flex items-center justify-center">
                 <Book size={20} />
               </div>
-              <div>
-                <h3 className="text-2xl font-serif font-bold">
+              <div className="flex flex-col">
+                <h3 className="text-xl md:text-2xl font-serif font-bold">
                   {loadingReading ? "Chargement..." : `${readingData?.nom_phonetique} (${readingData?.englishNameTranslation})`}
                 </h3>
-                <p className="text-xs text-stone-400 uppercase tracking-widest">
-                  {loadingReading ? "Veuillez patienter" : `Sourate ${readingData?.position} - ${readingData?.nom}`}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-[10px] text-stone-400 uppercase tracking-widest">
+                    {loadingReading ? "Veuillez patienter" : `Sourate ${readingData?.position} - ${readingData?.nom}`}
+                  </p>
+                  <span className="w-1 h-1 bg-stone-700 rounded-full" />
+                  <div className="flex gap-1">
+                    {(['fr', 'en', 'ar'] as const).map(lang => (
+                      <button
+                        key={lang}
+                        onClick={() => {
+                          setReadingLanguage(lang);
+                          if (readingData) handleReadSurah(readingData.position);
+                        }}
+                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition-all ${readingLanguage === lang ? 'bg-islamic-gold text-white' : 'bg-white/5 text-stone-500 hover:text-white'
+                          }`}
+                      >
+                        {lang.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
-            <button
-              onClick={() => setIsReading(false)}
-              className="w-12 h-12 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all"
-            >
-              <X size={24} />
-            </button>
+
+            <div className="flex items-center gap-4">
+              <div className="relative hidden md:block w-64">
+                <input
+                  type="text"
+                  placeholder="Chercher dans la sourate..."
+                  className="w-full pl-9 pr-4 py-2 bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-islamic-green focus:border-transparent outline-none transition-all text-xs text-white"
+                  value={verseSearchQuery}
+                  onChange={(e) => setVerseSearchQuery(e.target.value)}
+                />
+                <Globe className="absolute left-3 top-2.5 text-stone-500" size={14} />
+              </div>
+              <button
+                onClick={() => { setIsReading(false); setVerseSearchQuery(''); }}
+                className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all"
+              >
+                <X size={20} />
+              </button>
+            </div>
           </div>
 
           <div className="flex-grow overflow-y-auto p-6 md:p-12">
+            {/* Mobile Search */}
+            <div className="md:hidden mb-8">
+              <input
+                type="text"
+                placeholder="Chercher dans la sourate..."
+                className="w-full pl-4 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl outline-none text-white text-sm"
+                value={verseSearchQuery}
+                onChange={(e) => setVerseSearchQuery(e.target.value)}
+              />
+            </div>
+
             <div className="max-w-4xl mx-auto space-y-12">
               {loadingReading ? (
                 <div className="flex flex-col items-center justify-center py-40">
                   <Loader2 className="w-16 h-16 text-islamic-green animate-spin mb-4" />
                   <p className="text-white font-medium">Récupération du texte sacré...</p>
                 </div>
+              ) : filteredVerses?.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-stone-500">
+                  <Sparkles size={48} className="mb-4 opacity-20" />
+                  <p>Aucun verset ne correspond à votre recherche.</p>
+                </div>
               ) : (
-                readingData?.versets.map((v: any) => (
+                filteredVerses?.map((v: any) => (
                   <div key={v.position} className="flex flex-col gap-6 relative group">
                     <div className="absolute -left-8 top-0 text-stone-600 font-mono text-sm opacity-50 group-hover:opacity-100 transition-opacity">
                       {v.position_ds_sourate}
                     </div>
-                    <div className="text-right rtl">
-                      <p className="text-4xl md:text-5xl leading-[1.8] text-islamic-gold text-right font-serif" dir="rtl">
-                        {v.text_arabe}
-                      </p>
-                    </div>
-                    <div className="flex items-start gap-4">
-                      <div className="w-6 h-6 rounded bg-islamic-green/10 flex items-center justify-center text-[10px] text-islamic-green font-bold shrink-0 mt-1">
-                        FR
+                    {readingLanguage !== 'en' && (
+                      <div className="text-right rtl">
+                        <p className="text-4xl md:text-5xl leading-[1.8] text-islamic-gold text-right font-serif" dir="rtl">
+                          {v.text_arabe}
+                        </p>
                       </div>
-                      <p className="text-xl text-stone-300 leading-relaxed italic">
-                        {v.text}
-                      </p>
-                    </div>
+                    )}
+                    {(readingLanguage === 'fr' || readingLanguage === 'ar') && (
+                      <div className="flex items-start gap-4">
+                        <div className="w-6 h-6 rounded bg-islamic-green/10 flex items-center justify-center text-[10px] text-islamic-green font-bold shrink-0 mt-1">
+                          FR
+                        </div>
+                        <p className="text-xl text-stone-300 leading-relaxed italic">
+                          {v.text}
+                        </p>
+                      </div>
+                    )}
+                    {readingLanguage === 'en' && (
+                      <div className="flex flex-col gap-6">
+                        <div className="text-right rtl">
+                          <p className="text-4xl md:text-5xl leading-[1.8] text-islamic-gold text-right font-serif" dir="rtl">
+                            {v.text_arabe}
+                          </p>
+                        </div>
+                        <div className="flex items-start gap-4">
+                          <div className="w-10 h-6 rounded bg-blue-500/10 flex items-center justify-center text-[10px] text-blue-400 font-bold shrink-0 mt-1">
+                            EN
+                          </div>
+                          <p className="text-xl text-stone-300 leading-relaxed italic">
+                            {v.text_en}
+                          </p>
+                        </div>
+                      </div>
+                    )}
                     <div className="w-full h-px bg-white/5 mt-4" />
                   </div>
                 ))
