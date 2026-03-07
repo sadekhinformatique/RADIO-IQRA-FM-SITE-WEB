@@ -1,16 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import {
-  LayoutDashboard,
-  Newspaper,
-  Calendar,
-  BookOpen,
-  MessageSquare,
-  Plus,
-  Trash2,
-  Edit,
-  LogOut,
-  Save,
+import { 
+  Plus, 
+  Trash2, 
+  Edit, 
+  Save, 
   X,
   Loader2,
   Image as ImageIcon,
@@ -28,40 +22,67 @@ import {
   Settings,
   Radio,
   Music,
-  Video
+  Video,
+  LayoutDashboard,
+  Newspaper,
+  FileText,
+  FolderTree,
+  Tag,
+  MessageSquare,
+  Users,
+  Palette,
+  ChevronRight,
+  Menu as MenuIcon,
+  LogOut,
+  ArrowLeft,
+  Calendar,
+  BarChart3,
+  Activity,
+  MoreVertical,
+  Globe,
+  Smartphone,
+  ShieldCheck
 } from 'lucide-react';
-import { supabase, News, Programme, Lesson, ContactMessage, Widget, RadioConfig } from '../lib/supabase';
-
-type Tab = 'news' | 'programmes' | 'lessons' | 'messages' | 'media' | 'comments' | 'widgets' | 'settings';
+import { supabase, Post, Page, Category, Tag as TagType, Media, Profile, SiteSettings, Menu, MenuItem } from '../lib/supabase';
+import { AdminSidebar, AdminTab } from '../components/admin/AdminSidebar';
+import { BlockEditor, Block } from '../components/admin/BlockEditor';
 
 export default function Admin() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
-  const [activeTab, setActiveTab] = useState<Tab>('news');
+  const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any[]>([]);
-  const [mediaFiles, setMediaFiles] = useState<any[]>([]);
+  const [mediaFiles, setMediaFiles] = useState<Media[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isMediaPickerOpen, setIsMediaPickerOpen] = useState(false);
-  const [mediaPickerTarget, setMediaPickerTarget] = useState<'news' | 'widgets'>('news');
   const [editingItem, setEditingItem] = useState<any>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [statusMessage, setStatusMessage] = useState('');
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Form States
-  const [newsForm, setNewsForm] = useState({ title: '', content: '', image_url: '', category: 'Actualités' });
-  const [progForm, setProgForm] = useState({ title: '', time: '', host: '', description: '' });
-  const [lessonForm, setLessonForm] = useState({ title: '', level: 'Débutant', duration: '', description: '', icon_name: 'BookOpen' });
-  const [widgetsForm, setWidgetsForm] = useState({ title: '', type: 'youtube', content: '', image_url: '', is_active: true, order_index: 0 });
-  const [radioConfigForm, setRadioConfigForm] = useState<Omit<RadioConfig, 'id'>>({
-    primary_stream_url: '',
-    fallback_stream_url: '',
-    audio_playlist: [],
-    video_playlist: [],
-    youtube_channel_id: ''
+  // CMS Form States
+  const [postForm, setPostForm] = useState<Partial<Post>>({ 
+    title: '', 
+    slug: '', 
+    content: [], 
+    status: 'draft', 
+    category_id: '',
+    featured_image_url: '' 
+  });
+  const [pageForm, setPageForm] = useState<Partial<Page>>({ 
+    title: '', 
+    slug: '', 
+    content: [], 
+    status: 'draft' 
+  });
+  const [categoryForm, setCategoryForm] = useState<Partial<Category>>({ name: '', slug: '', description: '' });
+  const [tagForm, setTagForm] = useState<Partial<TagType>>({ name: '', slug: '' });
+  const [settingsForm, setSettingsForm] = useState<Partial<SiteSettings>>({
+    site_title: 'RADIO IQRA FM',
+    site_description: 'La Voix du Saint Coran',
+    theme_config: {}
   });
 
   const ADMIN_PASSWORD = 'admin_iqra_2026';
@@ -76,6 +97,11 @@ export default function Admin() {
     }
   };
 
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    localStorage.removeItem('admin_auth');
+  };
+
   useEffect(() => {
     if (localStorage.getItem('admin_auth') === 'true') {
       setIsAuthenticated(true);
@@ -84,11 +110,7 @@ export default function Admin() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      if (activeTab === 'media') {
-        fetchMedia();
-      } else {
-        fetchData();
-      }
+      fetchData();
     }
   }, [isAuthenticated, activeTab]);
 
@@ -96,39 +118,25 @@ export default function Admin() {
     setLoading(true);
     try {
       let table = '';
-      let orderField = 'created_at';
-
-      if (activeTab === 'news') table = 'news';
-      else if (activeTab === 'programmes') { table = 'programmes'; orderField = 'time'; }
-      else if (activeTab === 'lessons') table = 'lessons';
-      else if (activeTab === 'messages') table = 'contact_messages';
+      if (activeTab === 'posts') table = 'posts';
+      else if (activeTab === 'pages') table = 'pages';
+      else if (activeTab === 'categories') table = 'categories';
+      else if (activeTab === 'tags') table = 'tags';
+      else if (activeTab === 'media') table = 'media';
+      else if (activeTab === 'users') table = 'profiles';
+      else if (activeTab === 'settings') table = 'site_settings';
       else if (activeTab === 'comments') table = 'comments';
-      else if (activeTab === 'widgets') { table = 'widgets'; orderField = 'order_index'; }
-      else if (activeTab === 'settings') {
-        const { data: config, error } = await supabase.from('radio_config').select('*').single();
-        if (error && error.code !== 'PGRST116') throw error;
-        if (config) {
-          setData([config]);
-          setRadioConfigForm({
-            primary_stream_url: config.primary_stream_url,
-            fallback_stream_url: config.fallback_stream_url,
-            audio_playlist: config.audio_playlist || [],
-            video_playlist: config.video_playlist || [],
-            youtube_channel_id: config.youtube_channel_id || ''
-          });
-        } else {
-          setData([]);
-        }
-        return;
+
+      if (table) {
+        const { data: result, error } = await supabase
+          .from(table)
+          .select('*')
+          .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        setData(result || []);
+        if (activeTab === 'media') setMediaFiles(result || []);
       }
-
-      const { data: result, error } = await supabase
-        .from(table)
-        .select('*')
-        .order(orderField, { ascending: activeTab !== 'news' && activeTab !== 'messages' });
-
-      if (error) throw error;
-      setData(result || []);
     } catch (err) {
       console.error('Error fetching data:', err);
     } finally {
@@ -136,22 +144,10 @@ export default function Admin() {
     }
   };
 
-  const fetchMedia = async () => {
-    setLoading(true);
-    try {
-      const { data: files, error } = await supabase.storage.from('media').list('', {
-        limit: 100,
-        offset: 0,
-        sortBy: { column: 'created_at', order: 'desc' },
-      });
-
-      if (error) throw error;
-      setMediaFiles(files || []);
-    } catch (err) {
-      console.error('Error fetching media:', err);
-    } finally {
-      setLoading(false);
-    }
+  const showStatus = (type: 'success' | 'error', message: string) => {
+    setStatus(type);
+    setStatusMessage(message);
+    setTimeout(() => setStatus('idle'), 3000);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -161,41 +157,39 @@ export default function Admin() {
     setUploading(true);
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
-      const filePath = `${fileName}`;
+      const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `media/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
-        .from('media')
+        .from('cms_media')
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
-      fetchMedia();
-      setStatus('success');
-      setTimeout(() => setStatus('idle'), 3000);
+      const { data: { publicUrl } } = supabase.storage
+        .from('cms_media')
+        .getPublicUrl(filePath);
+
+      const { error: dbError } = await supabase
+        .from('media')
+        .insert([{
+          name: file.name,
+          url: publicUrl,
+          type: file.type.startsWith('image') ? 'image' : file.type.startsWith('video') ? 'video' : 'document',
+          mime_type: file.type,
+          size: file.size
+        }]);
+
+      if (dbError) throw dbError;
+      
+      showStatus('success', 'Fichier téléversé avec succès');
+      fetchData();
     } catch (err) {
-      console.error('Error uploading:', err);
-      setStatus('error');
+      console.error('Upload error:', err);
+      showStatus('error', 'Erreur lors du téléversement');
     } finally {
       setUploading(false);
     }
-  };
-
-  const handleDeleteMedia = async (fileName: string) => {
-    if (!window.confirm('Supprimer définitivement ce média ?')) return;
-    try {
-      const { error } = await supabase.storage.from('media').remove([fileName]);
-      if (error) throw error;
-      fetchMedia();
-    } catch (err) {
-      console.error('Error deleting media:', err);
-      alert('Erreur lors de la suppression');
-    }
-  };
-
-  const getPublicUrl = (fileName: string) => {
-    const { data } = supabase.storage.from('media').getPublicUrl(fileName);
-    return data.publicUrl;
   };
 
   const handleDelete = async (id: string) => {
@@ -203,19 +197,20 @@ export default function Admin() {
 
     try {
       let table = '';
-      if (activeTab === 'news') table = 'news';
-      else if (activeTab === 'programmes') table = 'programmes';
-      else if (activeTab === 'lessons') table = 'lessons';
-      else if (activeTab === 'messages') table = 'contact_messages';
-      else if (activeTab === 'comments') table = 'comments';
-      else if (activeTab === 'widgets') table = 'widgets';
+      if (activeTab === 'posts') table = 'posts';
+      else if (activeTab === 'pages') table = 'pages';
+      else if (activeTab === 'categories') table = 'categories';
+      else if (activeTab === 'tags') table = 'tags';
+      else if (activeTab === 'media') table = 'media';
 
       const { error } = await supabase.from(table).delete().eq('id', id);
       if (error) throw error;
+      
+      showStatus('success', 'Élément supprimé');
       fetchData();
     } catch (err) {
-      console.error('Error deleting:', err);
-      alert('Erreur lors de la suppression');
+      console.error('Delete error:', err);
+      showStatus('error', 'Erreur lors de la suppression');
     }
   };
 
@@ -224,110 +219,77 @@ export default function Admin() {
     setLoading(true);
     try {
       let table = '';
-      if (activeTab === 'news') table = 'news';
-      else if (activeTab === 'programmes') table = 'programmes';
-      else if (activeTab === 'lessons') table = 'lessons';
-      else if (activeTab === 'comments') table = 'comments';
-      else if (activeTab === 'widgets') table = 'widgets';
-      else if (activeTab === 'settings') table = 'radio_config';
+      let formData: any = {};
 
-      let payload = {};
-
-      if (activeTab === 'news') {
-        payload = {
-          ...newsForm,
-          published_at: editingItem?.published_at || new Date().toISOString()
-        };
-      }
-      else if (activeTab === 'programmes') payload = progForm;
-      else if (activeTab === 'lessons') payload = lessonForm;
-      else if (activeTab === 'widgets') payload = widgetsForm;
-      else if (activeTab === 'settings') {
-        // Exclude youtube_channel_id to prevent schema cache errors if the column is missing
-        const { youtube_channel_id, ...safeConfig } = radioConfigForm;
-        payload = safeConfig;
+      if (activeTab === 'posts') {
+        table = 'posts';
+        formData = postForm;
+      } else if (activeTab === 'pages') {
+        table = 'pages';
+        formData = pageForm;
+      } else if (activeTab === 'categories') {
+        table = 'categories';
+        formData = categoryForm;
+      } else if (activeTab === 'tags') {
+        table = 'tags';
+        formData = tagForm;
+      } else if (activeTab === 'settings') {
+        table = 'site_settings';
+        formData = settingsForm;
       }
 
-      if (editingItem || (activeTab === 'settings' && data.length > 0)) {
-        const id = editingItem?.id || data[0]?.id;
-        const { error } = await supabase.from(table).update(payload).eq('id', id);
+      if (editingItem) {
+        const { error } = await supabase.from(table).update(formData).eq('id', editingItem.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from(table).insert([payload]);
+        const { error } = await supabase.from(table).insert([formData]);
         if (error) throw error;
       }
 
-      setStatus('success');
-      setErrorMessage('');
+      showStatus('success', editingItem ? 'Mis à jour avec succès' : 'Créé avec succès');
       setIsModalOpen(false);
       setEditingItem(null);
-      resetForms();
       fetchData();
-      setTimeout(() => setStatus('idle'), 3000);
-    } catch (err: any) {
-      console.error('Error saving:', err);
-      setErrorMessage(err.message || 'Erreur inconnue');
-      setStatus('error');
+    } catch (err) {
+      console.error('Submit error:', err);
+      showStatus('error', 'Erreur lors de l\'enregistrement');
     } finally {
       setLoading(false);
     }
   };
 
-  const resetForms = () => {
-    setNewsForm({ title: '', content: '', image_url: '', category: 'Actualités' });
-    setProgForm({ title: '', time: '', host: '', description: '' });
-    setLessonForm({ title: '', level: 'Débutant', duration: '', description: '', icon_name: 'BookOpen' });
-    setWidgetsForm({ title: '', type: 'youtube', content: '', image_url: '', is_active: true, order_index: 0 });
-  };
-
-  const openEditModal = (item: any) => {
-    setEditingItem(item);
-    if (activeTab === 'news') setNewsForm({ title: item.title, content: item.content, image_url: item.image_url || '', category: item.category || 'Actualités' });
-    else if (activeTab === 'programmes') setProgForm({ title: item.title, time: item.time, host: item.host, description: item.description || '' });
-    else if (activeTab === 'lessons') setLessonForm({ title: item.title, level: item.level, duration: item.duration || '', description: item.description || '', icon_name: item.icon_name || 'BookOpen' });
-    else if (activeTab === 'widgets') setWidgetsForm({ title: item.title, type: item.type, content: item.content, image_url: item.image_url || '', is_active: item.is_active, order_index: item.order_index });
-    setIsModalOpen(true);
-  };
-
-  const filteredData = data.filter(item => {
-    const searchStr = searchTerm.toLowerCase();
-    const title = (item.title || item.subject || item.name || '').toLowerCase();
-    const content = (item.content || item.description || item.message || '').toLowerCase();
-    const host = (item.host || '').toLowerCase();
-    const category = (item.category || '').toLowerCase();
-    const email = (item.email || '').toLowerCase();
-    return title.includes(searchStr) || content.includes(searchStr) || host.includes(searchStr) || category.includes(searchStr) || email.includes(searchStr);
-  });
-
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white p-8 rounded-3xl shadow-xl border border-stone-100 w-full max-w-md"
+      <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full border border-stone-200"
         >
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-islamic-green/10 rounded-2xl flex items-center justify-center text-islamic-green mx-auto mb-4">
-              <LayoutDashboard size={32} />
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-20 h-20 bg-islamic-green rounded-2xl flex items-center justify-center text-white mb-4 shadow-lg shadow-islamic-green/20">
+              <Layout size={40} />
             </div>
-            <h1 className="text-2xl font-serif font-bold text-stone-900">Administration IQRA</h1>
-            <p className="text-stone-500 text-sm">Veuillez vous connecter pour gérer le contenu</p>
+            <h1 className="text-3xl font-serif font-bold text-stone-800">IQRA CMS</h1>
+            <p className="text-stone-500 font-medium">Administration du site</p>
           </div>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-6">
             <div>
-              <label className="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Mot de passe</label>
-              <input
-                type="password"
+              <label className="block text-sm font-bold text-stone-700 mb-2 uppercase tracking-widest">Mot de passe</label>
+              <input 
+                type="password" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green transition-colors"
+                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green transition-all"
                 placeholder="••••••••"
                 required
               />
             </div>
-            <button className="w-full bg-islamic-green text-white font-bold py-4 rounded-xl hover:bg-islamic-gold transition-all shadow-lg shadow-islamic-green/20">
-              Se Connecter
+            <button 
+              type="submit"
+              className="w-full bg-islamic-green text-white font-bold py-4 rounded-xl hover:bg-islamic-gold transition-all shadow-lg shadow-islamic-green/20 active:scale-95"
+            >
+              Se connecter
             </button>
           </form>
         </motion.div>
@@ -336,747 +298,694 @@ export default function Admin() {
   }
 
   return (
-    <div className="pt-24 min-h-screen bg-stone-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+    <div className="min-h-screen bg-stone-50 flex">
+      <AdminSidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} />
+
+      <main className="flex-1 ml-64 p-8">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-serif font-bold text-stone-900">Tableau de Bord</h1>
-            <p className="text-stone-500">Gérez les articles, programmes et leçons de RADIO IQRA</p>
+            <h1 className="text-3xl font-serif font-bold text-stone-800 capitalize">
+              {activeTab === 'dashboard' ? 'Tableau de bord' : activeTab}
+            </h1>
+            <p className="text-stone-500 font-medium">Bienvenue sur votre interface d'administration</p>
           </div>
-          <div className="flex items-center gap-6">
-            <a
-              href="/"
-              className="flex items-center gap-2 text-stone-400 hover:text-islamic-green font-medium transition-colors"
-            >
-              <ExternalLink size={18} />
-              Voir le site
+          <div className="flex items-center gap-4">
+            <a href="/" target="_blank" className="flex items-center gap-2 px-4 py-2 bg-white border border-stone-200 rounded-lg text-stone-600 font-bold text-sm hover:bg-stone-50 transition-all">
+              <Globe size={16} /> Voir le site
             </a>
-            <button
-              onClick={() => { localStorage.removeItem('admin_auth'); setIsAuthenticated(false); }}
-              className="flex items-center gap-2 text-stone-400 hover:text-red-500 font-medium transition-colors"
-            >
-              <LogOut size={18} />
-              Déconnexion
-            </button>
+            {['posts', 'pages', 'categories', 'tags'].includes(activeTab) && (
+              <button 
+                onClick={() => { setEditingItem(null); setIsModalOpen(true); }}
+                className="flex items-center gap-2 px-4 py-2 bg-islamic-green text-white rounded-lg font-bold text-sm hover:bg-islamic-gold transition-all shadow-lg shadow-islamic-green/20"
+              >
+                <Plus size={16} /> Ajouter
+              </button>
+            )}
+            {activeTab === 'media' && (
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-2 px-4 py-2 bg-islamic-green text-white rounded-lg font-bold text-sm hover:bg-islamic-gold transition-all shadow-lg shadow-islamic-green/20"
+              >
+                <Upload size={16} /> Téléverser
+              </button>
+            )}
           </div>
         </div>
 
         {/* Status Messages */}
         <AnimatePresence>
           {status !== 'idle' && (
-            <motion.div
+            <motion.div 
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className={`mb-6 p-4 rounded-2xl flex items-center gap-3 shadow-lg ${status === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
-                status === 'error' ? 'bg-red-50 text-red-700 border border-red-100' :
-                  'bg-blue-50 text-blue-700 border border-blue-100'
-                }`}
+              className={`mb-6 p-4 rounded-xl flex items-center gap-3 border ${
+                status === 'success' ? 'bg-green-50 border-green-100 text-green-700' : 'bg-red-50 border-red-100 text-red-700'
+              }`}
             >
-              {status === 'success' ? <CheckCircle2 size={20} /> : status === 'error' ? <AlertCircle size={20} /> : <Loader2 className="animate-spin" size={20} />}
-              <span className="font-bold flex flex-col">
-                <span>{status === 'success' ? 'Opération réussie !' : status === 'error' ? 'Une erreur est survenue.' : 'Chargement...'}</span>
-                {status === 'error' && errorMessage && <span className="text-xs font-normal opacity-80 mt-1">{errorMessage}</span>}
-              </span>
+              {status === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
+              <span className="font-medium">{statusMessage}</span>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Tabs */}
-        <div className="flex flex-wrap gap-2 mb-8">
-          {[
-            { id: 'news', label: 'Actualités', icon: Newspaper },
-            { id: 'programmes', label: 'Programmes', icon: Calendar },
-            { id: 'lessons', label: 'Leçons', icon: BookOpen },
-            { id: 'media', label: 'Médiathèque', icon: FileImage },
-            { id: 'messages', label: 'Messages', icon: MessageSquare },
-            { id: 'comments', label: 'Commentaires', icon: MessageSquare },
-            { id: 'widgets', label: 'Widgets', icon: Layout },
-            { id: 'settings', label: 'Configuration Radio', icon: Settings },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as Tab)}
-              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${activeTab === tab.id
-                ? 'bg-islamic-green text-white shadow-lg shadow-islamic-green/20'
-                : 'bg-white text-stone-500 border border-stone-100 hover:bg-stone-50'
-                }`}
-            >
-              <tab.icon size={18} />
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        {/* Dashboard View */}
+        {activeTab === 'dashboard' && (
+          <div className="space-y-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[
+                { label: 'Articles', value: '24', icon: Newspaper, color: 'bg-blue-50 text-blue-600' },
+                { label: 'Pages', value: '12', icon: FileText, color: 'bg-purple-50 text-purple-600' },
+                { label: 'Commentaires', value: '156', icon: MessageSquare, color: 'bg-orange-50 text-orange-600' },
+                { label: 'Utilisateurs', value: '5', icon: Users, color: 'bg-green-50 text-green-600' },
+              ].map((stat) => (
+                <div key={stat.label} className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${stat.color}`}>
+                    <stat.icon size={24} />
+                  </div>
+                  <div>
+                    <p className="text-stone-400 text-sm font-bold uppercase tracking-widest">{stat.label}</p>
+                    <p className="text-2xl font-serif font-bold text-stone-800">{stat.value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
 
-        {/* Content Area */}
-        <div className="bg-white rounded-3xl shadow-sm border border-stone-100 overflow-hidden">
-          {activeTab === 'media' ? (
-            <div className="p-8">
-              <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-                <h2 className="text-2xl font-serif font-bold text-stone-800">Médiathèque</h2>
-                <div className="flex gap-4">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    ref={fileInputRef}
-                    onChange={handleFileUpload}
-                  />
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploading}
-                    className="bg-islamic-green text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-islamic-gold transition-all disabled:opacity-50"
-                  >
-                    {uploading ? <Loader2 className="animate-spin" size={20} /> : <Upload size={20} />}
-                    Téléverser un média
-                  </button>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-serif font-bold text-stone-800">Articles récents</h3>
+                  <button className="text-islamic-green text-sm font-bold hover:underline">Voir tout</button>
+                </div>
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-center gap-4 p-3 hover:bg-stone-50 rounded-xl transition-colors">
+                      <div className="w-12 h-12 bg-stone-100 rounded-lg overflow-hidden">
+                        <img src={`https://picsum.photos/seed/${i}/100/100`} alt="Post" className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-bold text-stone-800 line-clamp-1">L'importance de la lecture du Coran</h4>
+                        <p className="text-xs text-stone-400">Publié il y a 2 heures • Par Admin</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-1 bg-green-50 text-green-600 text-[10px] font-bold rounded uppercase">Publié</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              {loading ? (
-                <div className="py-20 text-center">
-                  <Loader2 className="w-12 h-12 text-islamic-green animate-spin mx-auto mb-4" />
-                  <p className="text-stone-400">Chargement des médias...</p>
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-serif font-bold text-stone-800">Activité récente</h3>
+                  <Activity size={20} className="text-stone-300" />
                 </div>
-              ) : mediaFiles.length === 0 ? (
-                <div className="py-20 text-center border-2 border-dashed border-stone-100 rounded-3xl">
-                  <ImageIcon size={48} className="text-stone-200 mx-auto mb-4" />
-                  <p className="text-stone-400">Aucun média dans la bibliothèque</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                  {mediaFiles.map((file) => {
-                    const url = getPublicUrl(file.name);
-                    return (
-                      <div key={file.id} className="group relative aspect-square bg-stone-50 rounded-2xl overflow-hidden border border-stone-100">
-                        <img
-                          src={url}
-                          alt={file.name}
-                          className="w-full h-full object-cover transition-transform group-hover:scale-110"
-                          referrerPolicy="no-referrer"
-                        />
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
-                          <button
-                            onClick={() => { navigator.clipboard.writeText(url); alert('Lien copié !'); }}
-                            className="bg-white text-stone-800 p-2 rounded-lg hover:bg-islamic-gold hover:text-white transition-colors"
-                            title="Copier le lien"
-                          >
-                            <Copy size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteMedia(file.name)}
-                            className="bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 transition-colors"
-                            title="Supprimer"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
+                <div className="space-y-6">
+                  {[
+                    { user: 'Admin', action: 'a publié un nouvel article', time: 'Il y a 10 min' },
+                    { user: 'Modérateur', action: 'a approuvé un commentaire', time: 'Il y a 45 min' },
+                    { user: 'Admin', action: 'a mis à jour les réglages radio', time: 'Il y a 2 heures' },
+                  ].map((activity, i) => (
+                    <div key={i} className="flex gap-4">
+                      <div className="w-10 h-10 bg-stone-100 rounded-full flex items-center justify-center text-stone-400">
+                        <User size={20} />
                       </div>
-                    );
-                  })}
+                      <div>
+                        <p className="text-sm text-stone-800">
+                          <span className="font-bold">{activity.user}</span> {activity.action}
+                        </p>
+                        <p className="text-xs text-stone-400">{activity.time}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              )}
+              </div>
             </div>
-          ) : (
-            <>
-              <div className="p-6 border-b border-stone-100 flex justify-between items-center bg-stone-50/50">
-                <h2 className="text-xl font-serif font-bold text-stone-800 capitalize">
-                  {activeTab === 'news' ? 'Articles' : activeTab === 'comments' ? 'Commentaires' : activeTab === 'settings' ? 'Configuration Radio' : activeTab}
-                </h2>
-                {activeTab !== 'settings' && (
-                  <div className="flex items-center gap-4 flex-1 max-w-md mx-4">
-                    <div className="relative w-full">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300" size={16} />
-                      <input
-                        type="text"
-                        placeholder="Rechercher..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full bg-white border border-stone-200 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-islamic-green"
+          </div>
+        )}
+
+        {/* Data List View (Posts, Pages, etc.) */}
+        {['posts', 'pages', 'categories', 'tags', 'comments', 'users'].includes(activeTab) && (
+          <div className="bg-white rounded-2xl shadow-sm border border-stone-100 overflow-hidden">
+            <div className="p-4 border-b border-stone-100 bg-stone-50/50 flex items-center justify-between">
+              <div className="relative max-w-md w-full">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300" size={16} />
+                <input 
+                  type="text" 
+                  placeholder="Rechercher..." 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full bg-white border border-stone-200 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-islamic-green"
+                />
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-stone-50 text-stone-400 text-[10px] font-bold uppercase tracking-widest">
+                    <th className="px-6 py-4">Titre / Nom</th>
+                    {activeTab === 'posts' && <th className="px-6 py-4">Auteur</th>}
+                    {activeTab === 'posts' && <th className="px-6 py-4">Catégorie</th>}
+                    <th className="px-6 py-4">Statut</th>
+                    <th className="px-6 py-4">Date</th>
+                    <th className="px-6 py-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {data.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-stone-400">Aucun élément trouvé</td>
+                    </tr>
+                  ) : (
+                    data.map((item) => (
+                      <tr key={item.id} className="hover:bg-stone-50 transition-colors group">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            {item.featured_image_url && (
+                              <div className="w-10 h-10 rounded-lg overflow-hidden bg-stone-100">
+                                <img src={item.featured_image_url} alt="" className="w-full h-full object-cover" />
+                              </div>
+                            )}
+                            <div>
+                              <p className="font-bold text-stone-800">{item.title || item.name || item.username}</p>
+                              <p className="text-xs text-stone-400 italic">/{item.slug || ''}</p>
+                            </div>
+                          </div>
+                        </td>
+                        {activeTab === 'posts' && <td className="px-6 py-4 text-sm text-stone-600">Admin</td>}
+                        {activeTab === 'posts' && <td className="px-6 py-4 text-sm text-stone-600">Actualités</td>}
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                            item.status === 'published' ? 'bg-green-50 text-green-600' : 'bg-stone-100 text-stone-500'
+                          }`}>
+                            {item.status || 'Actif'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-stone-400">
+                          {new Date(item.created_at).toLocaleDateString('fr-FR')}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button 
+                              onClick={() => { setEditingItem(item); setIsModalOpen(true); }}
+                              className="p-2 text-stone-400 hover:text-islamic-green hover:bg-islamic-green/10 rounded-lg transition-all"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button 
+                              onClick={() => handleDelete(item.id)}
+                              className="p-2 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Media Library View */}
+        {activeTab === 'media' && (
+          <div className="space-y-6">
+            <div className="flex items-center gap-4 bg-white p-4 rounded-2xl border border-stone-100 shadow-sm">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300" size={16} />
+                <input 
+                  type="text" 
+                  placeholder="Rechercher dans les médias..." 
+                  className="w-full bg-stone-50 border border-stone-200 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-islamic-green"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <button className="p-2 bg-stone-100 rounded-lg text-stone-600 hover:bg-stone-200"><Layout size={18} /></button>
+                <button className="p-2 bg-stone-100 rounded-lg text-stone-600 hover:bg-stone-200"><MenuIcon size={18} /></button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              {mediaFiles.map((file) => (
+                <div key={file.id} className="group relative aspect-square bg-white rounded-xl border border-stone-100 overflow-hidden shadow-sm hover:shadow-md transition-all">
+                  {file.type === 'image' ? (
+                    <img src={file.url} alt={file.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-stone-50 text-stone-300">
+                      {file.type === 'video' ? <Video size={32} /> : <FileImage size={32} />}
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
+                    <p className="text-[10px] text-white font-bold text-center line-clamp-2">{file.name}</p>
+                    <div className="flex gap-1">
+                      <button 
+                        onClick={() => { navigator.clipboard.writeText(file.url); showStatus('success', 'Lien copié'); }}
+                        className="p-1.5 bg-white/20 hover:bg-white/40 text-white rounded-lg backdrop-blur-sm"
+                      >
+                        <Copy size={14} />
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(file.id)}
+                        className="p-1.5 bg-red-500/20 hover:bg-red-500/40 text-red-500 rounded-lg backdrop-blur-sm"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                className="aspect-square border-2 border-dashed border-stone-200 rounded-xl flex flex-col items-center justify-center text-stone-300 hover:border-islamic-green hover:text-islamic-green hover:bg-islamic-green/5 transition-all"
+              >
+                <Plus size={32} />
+                <span className="text-xs font-bold mt-2 uppercase tracking-widest">Ajouter</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Appearance View */}
+        {activeTab === 'appearance' && (
+          <div className="space-y-8">
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-stone-100">
+              <h3 className="text-xl font-serif font-bold text-stone-800 mb-6 flex items-center gap-2">
+                <Palette size={20} className="text-islamic-green" /> Thèmes
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[
+                  { name: 'Iqra Classic', slug: 'classic', image: 'https://picsum.photos/seed/classic/400/300', active: true },
+                  { name: 'Modern Dark', slug: 'dark', image: 'https://picsum.photos/seed/dark/400/300', active: false },
+                  { name: 'Minimalist', slug: 'minimal', image: 'https://picsum.photos/seed/minimal/400/300', active: false },
+                ].map((theme) => (
+                  <div key={theme.slug} className={`group relative rounded-2xl overflow-hidden border-2 transition-all ${theme.active ? 'border-islamic-green' : 'border-stone-100 hover:border-stone-200'}`}>
+                    <img src={theme.image} alt={theme.name} className="w-full aspect-video object-cover" />
+                    <div className="p-4 bg-white">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-bold text-stone-800">{theme.name}</h4>
+                        {theme.active && <span className="px-2 py-0.5 bg-islamic-green text-white text-[10px] font-bold rounded uppercase">Actif</span>}
+                      </div>
+                      <div className="flex gap-2">
+                        {!theme.active && <button className="flex-1 py-2 bg-stone-100 text-stone-600 rounded-lg text-xs font-bold hover:bg-stone-200 transition-all">Activer</button>}
+                        <button className="flex-1 py-2 border border-stone-100 text-stone-600 rounded-lg text-xs font-bold hover:bg-stone-50 transition-all">Personnaliser</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-stone-100">
+              <h3 className="text-xl font-serif font-bold text-stone-800 mb-6 flex items-center gap-2">
+                <MenuIcon size={20} className="text-islamic-green" /> Menus de navigation
+              </h3>
+              <div className="space-y-4">
+                <div className="flex items-center gap-4 p-4 bg-stone-50 rounded-xl border border-stone-100">
+                  <select className="bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none">
+                    <option>Menu Principal (Header)</option>
+                    <option>Menu Secondaire (Footer)</option>
+                  </select>
+                  <button className="px-4 py-2 bg-islamic-green text-white rounded-lg text-sm font-bold hover:bg-islamic-gold transition-all">Gérer</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Radio View */}
+        {activeTab === 'radio' && (
+          <div className="max-w-4xl space-y-8">
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-stone-100">
+              <h3 className="text-xl font-serif font-bold text-stone-800 mb-6 flex items-center gap-2">
+                <Radio size={20} className="text-islamic-green" /> Configuration Radio
+              </h3>
+              <form className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">URL du flux (Icecast/AzuraCast)</label>
+                    <input 
+                      type="text" 
+                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
+                      placeholder="https://radio.example.com/stream"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">URL de secours</label>
+                    <input 
+                      type="text" 
+                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
+                      placeholder="https://backup.example.com/stream"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-6 bg-stone-900 rounded-2xl text-white">
+                  <h4 className="text-sm font-bold mb-4 uppercase tracking-widest text-islamic-green">Aperçu du Player</h4>
+                  <div className="flex items-center gap-6">
+                    <div className="w-16 h-16 bg-white/10 rounded-xl flex items-center justify-center">
+                      <Music size={32} />
+                    </div>
+                    <div>
+                      <p className="text-lg font-serif font-bold">RADIO IQRA FM</p>
+                      <p className="text-xs text-stone-400">En direct • La Voix du Saint Coran</p>
+                    </div>
+                    <div className="ml-auto flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-red-500">Live</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <button className="bg-islamic-green text-white font-bold px-8 py-3 rounded-xl hover:bg-islamic-gold transition-all shadow-lg shadow-islamic-green/20">
+                    Enregistrer les réglages radio
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-stone-100">
+              <h3 className="text-xl font-serif font-bold text-stone-800 mb-6 flex items-center gap-2">
+                <Calendar size={20} className="text-islamic-green" /> Programme Radio
+              </h3>
+              <div className="space-y-4">
+                <button className="w-full p-4 border-2 border-dashed border-stone-200 rounded-xl text-stone-400 hover:border-islamic-green hover:text-islamic-green transition-all flex items-center justify-center gap-2">
+                  <Plus size={20} /> Ajouter une émission au programme
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Settings View */}
+        {activeTab === 'settings' && (
+          <div className="max-w-4xl space-y-8">
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-stone-100">
+              <h3 className="text-xl font-serif font-bold text-stone-800 mb-6 flex items-center gap-2">
+                <Settings size={20} className="text-islamic-green" /> Réglages généraux
+              </h3>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Titre du site</label>
+                    <input 
+                      type="text" 
+                      value={settingsForm.site_title}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, site_title: e.target.value })}
+                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Description du site</label>
+                    <input 
+                      type="text" 
+                      value={settingsForm.site_description}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, site_description: e.target.value })}
+                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Logo du site (URL)</label>
+                  <div className="flex gap-4">
+                    <input 
+                      type="text" 
+                      value={settingsForm.logo_url}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, logo_url: e.target.value })}
+                      className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
+                    />
+                    <button type="button" className="px-4 bg-stone-100 rounded-xl hover:bg-stone-200 transition-colors">
+                      <ImageIcon size={20} className="text-stone-500" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t border-stone-100">
+                  <h4 className="text-sm font-bold text-stone-800 mb-4 uppercase tracking-widest">Réseaux Sociaux</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[
+                      { label: 'Facebook', key: 'facebook_url' },
+                      { label: 'Twitter', key: 'twitter_url' },
+                      { label: 'Instagram', key: 'instagram_url' },
+                      { label: 'TikTok', key: 'tiktok_url' },
+                    ].map((social) => (
+                      <div key={social.key}>
+                        <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">{social.label}</label>
+                        <input 
+                          type="text" 
+                          value={(settingsForm as any)[social.key] || ''}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, [social.key]: e.target.value })}
+                          className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-islamic-green"
+                          placeholder="https://..."
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <button 
+                    type="submit"
+                    className="bg-islamic-green text-white font-bold px-8 py-3 rounded-xl hover:bg-islamic-gold transition-all shadow-lg shadow-islamic-green/20"
+                  >
+                    Enregistrer les modifications
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-stone-100">
+              <h3 className="text-xl font-serif font-bold text-stone-800 mb-6 flex items-center gap-2">
+                <ShieldCheck size={20} className="text-islamic-green" /> Sécurité & Rôles
+              </h3>
+              <div className="space-y-4">
+                <div className="p-4 bg-stone-50 rounded-xl border border-stone-100 flex items-center justify-between">
+                  <div>
+                    <p className="font-bold text-stone-800">Inscription des utilisateurs</p>
+                    <p className="text-xs text-stone-500">Autoriser n'importe qui à s'inscrire sur le site</p>
+                  </div>
+                  <div className="w-12 h-6 bg-stone-200 rounded-full relative cursor-pointer">
+                    <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow-sm" />
+                  </div>
+                </div>
+                <div className="p-4 bg-stone-50 rounded-xl border border-stone-100 flex items-center justify-between">
+                  <div>
+                    <p className="font-bold text-stone-800">Rôle par défaut</p>
+                    <p className="text-xs text-stone-500">Rôle attribué aux nouveaux inscrits</p>
+                  </div>
+                  <select className="bg-white border border-stone-200 rounded-lg px-3 py-1 text-sm focus:outline-none">
+                    <option>Abonné</option>
+                    <option>Contributeur</option>
+                    <option>Auteur</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Editor Modal (Full Screen for Posts/Pages) */}
+      <AnimatePresence>
+        {isModalOpen && (activeTab === 'posts' || activeTab === 'pages') && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-white z-[100] flex flex-col"
+          >
+            {/* Editor Header */}
+            <div className="h-16 border-b border-stone-100 px-6 flex items-center justify-between bg-white">
+              <div className="flex items-center gap-4">
+                <button 
+                  onClick={() => setIsModalOpen(false)}
+                  className="p-2 hover:bg-stone-50 rounded-lg text-stone-400"
+                >
+                  <ArrowLeft size={20} />
+                </button>
+                <div className="h-6 w-px bg-stone-100" />
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-stone-400 uppercase tracking-widest">
+                    {editingItem ? 'Modifier' : 'Nouvel'} {activeTab === 'posts' ? 'Article' : 'Page'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button className="px-4 py-2 text-stone-600 font-bold text-sm hover:bg-stone-50 rounded-lg transition-all">
+                  Aperçu
+                </button>
+                <button 
+                  onClick={handleSubmit}
+                  className="px-6 py-2 bg-islamic-green text-white font-bold text-sm rounded-lg hover:bg-islamic-gold transition-all shadow-lg shadow-islamic-green/20"
+                >
+                  {editingItem ? 'Mettre à jour' : 'Publier'}
+                </button>
+                <div className="h-6 w-px bg-stone-100 mx-2" />
+                <button className="p-2 text-stone-400 hover:bg-stone-50 rounded-lg">
+                  <Settings size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Editor Content */}
+            <div className="flex-1 overflow-y-auto bg-stone-50/30">
+              <div className="max-w-4xl mx-auto py-12 px-6">
+                <input 
+                  type="text" 
+                  placeholder="Ajouter un titre"
+                  className="w-full bg-transparent border-none focus:ring-0 text-5xl font-serif font-bold text-stone-800 mb-8 placeholder:text-stone-200"
+                  value={activeTab === 'posts' ? postForm.title : pageForm.title}
+                  onChange={(e) => {
+                    const title = e.target.value;
+                    const slug = title.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
+                    if (activeTab === 'posts') setPostForm({ ...postForm, title, slug });
+                    else setPageForm({ ...pageForm, title, slug });
+                  }}
+                />
+
+                <BlockEditor 
+                  blocks={activeTab === 'posts' ? (postForm.content as Block[]) : (pageForm.content as Block[])}
+                  onChange={(blocks) => {
+                    if (activeTab === 'posts') setPostForm({ ...postForm, content: blocks });
+                    else setPageForm({ ...pageForm, content: blocks });
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Editor Sidebar (Optional Settings) */}
+            <div className="w-80 border-l border-stone-100 bg-white hidden lg:block">
+              <div className="p-6">
+                <h3 className="text-sm font-bold text-stone-800 uppercase tracking-widest mb-6">Réglages</h3>
+                
+                <div className="space-y-8">
+                  <div>
+                    <label className="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Permalien</label>
+                    <div className="flex items-center gap-1 text-xs text-stone-500 bg-stone-50 p-2 rounded border border-stone-100">
+                      <span className="opacity-50">/</span>
+                      <input 
+                        type="text" 
+                        value={activeTab === 'posts' ? postForm.slug : pageForm.slug}
+                        onChange={(e) => {
+                          if (activeTab === 'posts') setPostForm({ ...postForm, slug: e.target.value });
+                          else setPageForm({ ...pageForm, slug: e.target.value });
+                        }}
+                        className="bg-transparent border-none p-0 focus:ring-0 w-full"
                       />
                     </div>
                   </div>
-                )}
-                {activeTab !== 'messages' && activeTab !== 'comments' && activeTab !== 'settings' && (
-                  <button
-                    onClick={() => { setEditingItem(null); resetForms(); setIsModalOpen(true); }}
-                    className="bg-islamic-green text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 text-sm hover:bg-islamic-gold transition-all"
-                  >
-                    <Plus size={16} />
-                    Ajouter
-                  </button>
-                )}
-                {activeTab === 'settings' && (
-                  <button
-                    onClick={handleSubmit}
-                    disabled={loading}
-                    className="bg-islamic-green text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 text-sm hover:bg-islamic-gold transition-all disabled:opacity-50"
-                  >
-                    {loading ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
-                    Enregistrer
-                  </button>
-                )}
+
+                  {activeTab === 'posts' && (
+                    <div>
+                      <label className="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Catégorie</label>
+                      <select className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none">
+                        <option>Actualités</option>
+                        <option>Émissions</option>
+                        <option>Coran</option>
+                      </select>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Image mise en avant</label>
+                    <div className="aspect-video bg-stone-50 border-2 border-dashed border-stone-200 rounded-xl flex flex-col items-center justify-center text-stone-300 hover:border-islamic-green hover:text-islamic-green transition-all cursor-pointer">
+                      <ImageIcon size={32} />
+                      <span className="text-[10px] font-bold mt-2 uppercase tracking-widest">Définir l'image</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-6 border-t border-stone-100">
+                    <h4 className="text-xs font-bold text-stone-800 mb-4 uppercase tracking-widest">SEO</h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Meta Titre</label>
+                        <input type="text" className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-xs" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Meta Description</label>
+                        <textarea className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-xs h-20 resize-none" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-              {activeTab === 'settings' ? (
-                <div className="p-8 space-y-10">
-                  {/* Streaming URLs */}
-                  <div className="space-y-6">
-                    <div className="flex items-center gap-3 text-islamic-green">
-                      <Radio size={24} />
-                      <h3 className="text-xl font-serif font-bold">Flux de Streaming & IDs Sociaux</h3>
-                    </div>
-                    <div className="grid md:grid-cols-2 gap-8">
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Lien de Streaming Principal</label>
-                        <input
-                          type="text"
-                          value={radioConfigForm.primary_stream_url}
-                          onChange={(e) => setRadioConfigForm({ ...radioConfigForm, primary_stream_url: e.target.value })}
-                          className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
-                          placeholder="https://..."
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Lien de Streaming de Secours (Fallback)</label>
-                        <input
-                          type="text"
-                          value={radioConfigForm.fallback_stream_url}
-                          onChange={(e) => setRadioConfigForm({ ...radioConfigForm, fallback_stream_url: e.target.value })}
-                          className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
-                          placeholder="https://..."
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">ID de Chaîne YouTube (pour le flux social)</label>
-                        <input
-                          type="text"
-                          value={radioConfigForm.youtube_channel_id}
-                          onChange={(e) => setRadioConfigForm({ ...radioConfigForm, youtube_channel_id: e.target.value })}
-                          className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
-                          placeholder="Ex: UCJ9nE4p5YlbTsP_fLZvxRLw"
-                        />
-                        <p className="text-[10px] text-stone-400">Utilisé pour récupérer automatiquement les dernières vidéos.</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Audio Playlist */}
-                  <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3 text-islamic-green">
-                        <Music size={24} />
-                        <h3 className="text-xl font-serif font-bold">Playlist Audio (Secours)</h3>
-                      </div>
-                      <button
-                        onClick={() => setRadioConfigForm({
-                          ...radioConfigForm,
-                          audio_playlist: [...radioConfigForm.audio_playlist, { title: '', url: '' }]
-                        })}
-                        className="text-islamic-green hover:text-islamic-gold font-bold text-sm flex items-center gap-1"
-                      >
-                        <Plus size={16} /> Ajouter un titre
-                      </button>
-                    </div>
-                    <div className="space-y-4">
-                      {radioConfigForm.audio_playlist.map((item, idx) => (
-                        <div key={idx} className="flex gap-4 items-end bg-stone-50 p-4 rounded-2xl border border-stone-100">
-                          <div className="flex-1 space-y-2">
-                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Titre</label>
-                            <input
-                              type="text"
-                              value={item.title}
-                              onChange={(e) => {
-                                const newList = [...radioConfigForm.audio_playlist];
-                                newList[idx].title = e.target.value;
-                                setRadioConfigForm({ ...radioConfigForm, audio_playlist: newList });
-                              }}
-                              className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-islamic-green"
-                              placeholder="Nom du fichier"
-                            />
-                          </div>
-                          <div className="flex-[2] space-y-2">
-                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">URL du fichier</label>
-                            <input
-                              type="text"
-                              value={item.url}
-                              onChange={(e) => {
-                                const newList = [...radioConfigForm.audio_playlist];
-                                newList[idx].url = e.target.value;
-                                setRadioConfigForm({ ...radioConfigForm, audio_playlist: newList });
-                              }}
-                              className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-islamic-green"
-                              placeholder="https://..."
-                            />
-                          </div>
-                          <button
-                            onClick={() => {
-                              const newList = radioConfigForm.audio_playlist.filter((_, i) => i !== idx);
-                              setRadioConfigForm({ ...radioConfigForm, audio_playlist: newList });
-                            }}
-                            className="p-2 text-stone-300 hover:text-red-500 transition-colors"
-                          >
-                            <Trash2 size={20} />
-                          </button>
-                        </div>
-                      ))}
-                      {radioConfigForm.audio_playlist.length === 0 && (
-                        <p className="text-center py-8 text-stone-400 border-2 border-dashed border-stone-100 rounded-2xl">Aucun élément dans la playlist audio</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Video Playlist */}
-                  <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3 text-islamic-green">
-                        <Video size={24} />
-                        <h3 className="text-xl font-serif font-bold">Playlist Vidéo (Boucle)</h3>
-                      </div>
-                      <button
-                        onClick={() => setRadioConfigForm({
-                          ...radioConfigForm,
-                          video_playlist: [...radioConfigForm.video_playlist, { title: '', url: '' }]
-                        })}
-                        className="text-islamic-green hover:text-islamic-gold font-bold text-sm flex items-center gap-1"
-                      >
-                        <Plus size={16} /> Ajouter une vidéo
-                      </button>
-                    </div>
-                    <div className="space-y-4">
-                      {radioConfigForm.video_playlist.map((item, idx) => (
-                        <div key={idx} className="flex gap-4 items-end bg-stone-50 p-4 rounded-2xl border border-stone-100">
-                          <div className="flex-1 space-y-2">
-                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Titre</label>
-                            <input
-                              type="text"
-                              value={item.title}
-                              onChange={(e) => {
-                                const newList = [...radioConfigForm.video_playlist];
-                                newList[idx].title = e.target.value;
-                                setRadioConfigForm({ ...radioConfigForm, video_playlist: newList });
-                              }}
-                              className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-islamic-green"
-                              placeholder="Nom de la vidéo"
-                            />
-                          </div>
-                          <div className="flex-[2] space-y-2">
-                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">URL de la vidéo</label>
-                            <input
-                              type="text"
-                              value={item.url}
-                              onChange={(e) => {
-                                const newList = [...radioConfigForm.video_playlist];
-                                newList[idx].url = e.target.value;
-                                setRadioConfigForm({ ...radioConfigForm, video_playlist: newList });
-                              }}
-                              className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-islamic-green"
-                              placeholder="https://..."
-                            />
-                          </div>
-                          <button
-                            onClick={() => {
-                              const newList = radioConfigForm.video_playlist.filter((_, i) => i !== idx);
-                              setRadioConfigForm({ ...radioConfigForm, video_playlist: newList });
-                            }}
-                            className="p-2 text-stone-300 hover:text-red-500 transition-colors"
-                          >
-                            <Trash2 size={20} />
-                          </button>
-                        </div>
-                      ))}
-                      {radioConfigForm.video_playlist.length === 0 && (
-                        <p className="text-center py-8 text-stone-400 border-2 border-dashed border-stone-100 rounded-2xl">Aucun élément dans la playlist vidéo</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead className="bg-stone-50 text-stone-400 text-xs font-bold uppercase tracking-widest">
-                      <tr>
-                        <th className="px-6 py-4">Titre / Sujet</th>
-                        <th className="px-6 py-4">Détails</th>
-                        {activeTab === 'news' && <th className="px-6 py-4">Vues</th>}
-                        <th className="px-6 py-4">Date</th>
-                        <th className="px-6 py-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-stone-100">
-                      {loading ? (
-                        <tr>
-                          <td colSpan={4} className="px-6 py-12 text-center">
-                            <Loader2 className="w-8 h-8 text-islamic-green animate-spin mx-auto mb-2" />
-                            <p className="text-stone-400">Chargement...</p>
-                          </td>
-                        </tr>
-                      ) : filteredData.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="px-6 py-12 text-center text-stone-400">
-                            Aucun élément trouvé
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredData.map((item) => (
-                          <tr key={item.id} className="hover:bg-stone-50/50 transition-colors">
-                            <td className="px-6 py-4">
-                              <div className="font-bold text-stone-800">{item.title || item.subject || item.name}</div>
-                              {(item.email || item.category || item.news_id || item.type) && (
-                                <div className="text-xs text-stone-400">
-                                  {item.email || item.category || (activeTab === 'comments' ? `Article ID: ${item.news_id}` : item.type)}
-                                </div>
-                              )}
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="text-sm text-stone-500 line-clamp-1">
-                                {item.host || item.level || item.message || item.content}
-                              </div>
-                            </td>
-                            {activeTab === 'news' && (
-                              <td className="px-6 py-4">
-                                <div className="flex items-center gap-1.5 text-stone-600 font-medium">
-                                  <Eye size={14} className="text-stone-300" />
-                                  {item.views || 0}
-                                </div>
-                              </td>
-                            )}
-                            <td className="px-6 py-4 text-sm text-stone-400">
-                              {new Date(item.created_at || item.published_at).toLocaleDateString('fr-FR')}
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              <div className="flex justify-end gap-2">
-                                {activeTab !== 'messages' && activeTab !== 'comments' && (
-                                  <button
-                                    onClick={() => openEditModal(item)}
-                                    className="p-2 text-stone-400 hover:text-islamic-green transition-colors"
-                                  >
-                                    <Edit size={18} />
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => handleDelete(item.id)}
-                                  className="p-2 text-stone-400 hover:text-red-500 transition-colors"
-                                >
-                                  <Trash2 size={18} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Modal Form */}
+      {/* Standard Modal (for Categories, Tags, etc.) */}
       <AnimatePresence>
-        {isModalOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsModalOpen(false)}
-              className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm"
-            />
-            <motion.div
+        {isModalOpen && !['posts', 'pages'].includes(activeTab) && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <motion.div 
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl relative z-10 overflow-hidden"
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden"
             >
-              <div className="p-6 border-b border-stone-100 flex justify-between items-center bg-stone-50">
+              <div className="p-6 border-b border-stone-100 flex justify-between items-center">
                 <h3 className="text-xl font-serif font-bold text-stone-800">
-                  {editingItem ? 'Modifier' : 'Ajouter'} {activeTab === 'news' ? 'un Article' : activeTab === 'programmes' ? 'un Programme' : activeTab === 'widgets' ? 'un Widget' : 'une Leçon'}
+                  {editingItem ? 'Modifier' : 'Ajouter'} {activeTab === 'categories' ? 'une catégorie' : 'une étiquette'}
                 </h3>
-                <button onClick={() => setIsModalOpen(false)} className="text-stone-400 hover:text-stone-600">
-                  <X size={24} />
-                </button>
+                <button onClick={() => setIsModalOpen(false)} className="text-stone-400 hover:text-stone-600"><X size={24} /></button>
               </div>
-
-              <form onSubmit={handleSubmit} className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
-                {activeTab === 'news' && (
-                  <>
-                    <div className="grid sm:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Titre de l'article</label>
-                        <input
-                          type="text"
-                          required
-                          value={newsForm.title}
-                          onChange={(e) => setNewsForm({ ...newsForm, title: e.target.value })}
-                          className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
-                          placeholder="Ex: Nouveau programme de Ramadan"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Catégorie</label>
-                        <select
-                          value={newsForm.category}
-                          onChange={(e) => setNewsForm({ ...newsForm, category: e.target.value })}
-                          className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
-                        >
-                          <option>Actualités</option>
-                          <option>Religion</option>
-                          <option>Culture</option>
-                          <option>Éducation</option>
-                          <option>Communauté</option>
-                          <option>Santé</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Image de l'article</label>
-                      <div className="flex gap-3">
-                        <div className="flex-1 relative">
-                          <ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-300" size={18} />
-                          <input
-                            type="url"
-                            value={newsForm.image_url}
-                            onChange={(e) => setNewsForm({ ...newsForm, image_url: e.target.value })}
-                            className="w-full bg-stone-50 border border-stone-200 rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:border-islamic-green"
-                            placeholder="URL de l'image"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => { setMediaPickerTarget('news'); setIsMediaPickerOpen(true); }}
-                          className="bg-stone-100 text-stone-600 px-4 py-3 rounded-xl hover:bg-stone-200 transition-all flex items-center gap-2 font-bold text-sm"
-                        >
-                          <Search size={16} />
-                          Médiathèque
-                        </button>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Contenu</label>
-                      <textarea
-                        required
-                        rows={6}
-                        value={newsForm.content}
-                        onChange={(e) => setNewsForm({ ...newsForm, content: e.target.value })}
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
-                        placeholder="Écrivez votre article ici..."
-                      ></textarea>
-                    </div>
-                  </>
+              <form onSubmit={handleSubmit} className="p-6 space-y-6">
+                <div>
+                  <label className="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Nom</label>
+                  <input 
+                    type="text" 
+                    value={activeTab === 'categories' ? categoryForm.name : tagForm.name}
+                    onChange={(e) => {
+                      const name = e.target.value;
+                      const slug = name.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
+                      if (activeTab === 'categories') setCategoryForm({ ...categoryForm, name, slug });
+                      else setTagForm({ ...tagForm, name, slug });
+                    }}
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Slug</label>
+                  <input 
+                    type="text" 
+                    value={activeTab === 'categories' ? categoryForm.slug : tagForm.slug}
+                    onChange={(e) => {
+                      if (activeTab === 'categories') setCategoryForm({ ...categoryForm, slug: e.target.value });
+                      else setTagForm({ ...tagForm, slug: e.target.value });
+                    }}
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
+                  />
+                </div>
+                {activeTab === 'categories' && (
+                  <div>
+                    <label className="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Description</label>
+                    <textarea 
+                      value={categoryForm.description}
+                      onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
+                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green h-32 resize-none"
+                    />
+                  </div>
                 )}
-
-                {activeTab === 'programmes' && (
-                  <>
-                    <div className="grid sm:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Titre</label>
-                        <input
-                          type="text" required
-                          value={progForm.title}
-                          onChange={(e) => setProgForm({ ...progForm, title: e.target.value })}
-                          className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Horaire</label>
-                        <div className="relative">
-                          <Clock className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-300" size={18} />
-                          <input
-                            type="text" required
-                            value={progForm.time}
-                            onChange={(e) => setProgForm({ ...progForm, time: e.target.value })}
-                            className="w-full bg-stone-50 border border-stone-200 rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:border-islamic-green"
-                            placeholder="Ex: 08:00 - 09:30"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Animateur / Host</label>
-                      <div className="relative">
-                        <User className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-300" size={18} />
-                        <input
-                          type="text" required
-                          value={progForm.host}
-                          onChange={(e) => setProgForm({ ...progForm, host: e.target.value })}
-                          className="w-full bg-stone-50 border border-stone-200 rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:border-islamic-green"
-                          placeholder="Ex: Imam Traoré"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Description</label>
-                      <textarea
-                        rows={3}
-                        value={progForm.description}
-                        onChange={(e) => setProgForm({ ...progForm, description: e.target.value })}
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
-                      ></textarea>
-                    </div>
-                  </>
-                )}
-
-                {activeTab === 'lessons' && (
-                  <>
-                    <div className="grid sm:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Titre de la leçon</label>
-                        <input
-                          type="text" required
-                          value={lessonForm.title}
-                          onChange={(e) => setLessonForm({ ...lessonForm, title: e.target.value })}
-                          className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Niveau</label>
-                        <select
-                          value={lessonForm.level}
-                          onChange={(e) => setLessonForm({ ...lessonForm, level: e.target.value })}
-                          className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
-                        >
-                          <option>Débutant</option>
-                          <option>Intermédiaire</option>
-                          <option>Avancé</option>
-                          <option>Tous Niveaux</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="grid sm:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Durée / Nombre de leçons</label>
-                        <input
-                          type="text" required
-                          value={lessonForm.duration}
-                          onChange={(e) => setLessonForm({ ...lessonForm, duration: e.target.value })}
-                          className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
-                          placeholder="Ex: 12 Leçons"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Icône</label>
-                        <select
-                          value={lessonForm.icon_name}
-                          onChange={(e) => setLessonForm({ ...lessonForm, icon_name: e.target.value })}
-                          className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
-                        >
-                          <option value="BookOpen">Livre Ouvert</option>
-                          <option value="Globe">Monde</option>
-                          <option value="Sparkles">Étoiles</option>
-                          <option value="Heart">Cœur</option>
-                          <option value="Book">Livre</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Description</label>
-                      <textarea
-                        rows={3}
-                        value={lessonForm.description}
-                        onChange={(e) => setLessonForm({ ...lessonForm, description: e.target.value })}
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
-                      ></textarea>
-                    </div>
-                  </>
-                )}
-
-                {activeTab === 'widgets' && (
-                  <>
-                    <div className="grid sm:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Titre du Widget</label>
-                        <input
-                          type="text" required
-                          value={widgetsForm.title}
-                          onChange={(e) => setWidgetsForm({ ...widgetsForm, title: e.target.value })}
-                          className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Type</label>
-                        <select
-                          value={widgetsForm.type}
-                          onChange={(e) => setWidgetsForm({ ...widgetsForm, type: e.target.value })}
-                          className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
-                        >
-                          <option value="youtube">YouTube Video</option>
-                          <option value="facebook">Facebook Feed</option>
-                          <option value="tiktok">TikTok Video</option>
-                          <option value="social_post">Publication Sociale (Flux)</option>
-                          <option value="custom_html">Code HTML Personnalisé</option>
-                          <option value="social_card">Carte Réseaux Sociaux</option>
-                          <option value="text">Texte Simple</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Contenu / URL / Code Embed</label>
-                      <textarea
-                        rows={4} required
-                        value={widgetsForm.content}
-                        onChange={(e) => setWidgetsForm({ ...widgetsForm, content: e.target.value })}
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green font-mono text-sm"
-                        placeholder="Collez ici l'URL ou le code d'intégration..."
-                      ></textarea>
-                    </div>
-                    <div className="grid sm:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Image URL (Optionnel)</label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={widgetsForm.image_url}
-                            onChange={(e) => setWidgetsForm({ ...widgetsForm, image_url: e.target.value })}
-                            className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => { setMediaPickerTarget('widgets'); setIsMediaPickerOpen(true); }}
-                            className="bg-stone-100 p-3 rounded-xl hover:bg-stone-200 transition-colors"
-                          >
-                            <FileImage size={20} />
-                          </button>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Ordre d'affichage</label>
-                        <input
-                          type="number"
-                          value={widgetsForm.order_index}
-                          onChange={(e) => setWidgetsForm({ ...widgetsForm, order_index: parseInt(e.target.value) })}
-                          className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:border-islamic-green"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        id="is_active"
-                        checked={widgetsForm.is_active}
-                        onChange={(e) => setWidgetsForm({ ...widgetsForm, is_active: e.target.checked })}
-                        className="w-5 h-5 rounded border-stone-300 text-islamic-green focus:ring-islamic-green"
-                      />
-                      <label htmlFor="is_active" className="text-sm font-medium text-stone-700">Widget Actif</label>
-                    </div>
-                  </>
-                )}
-
-                <div className="pt-6 flex gap-4">
-                  <button
+                <div className="flex justify-end gap-3 pt-4">
+                  <button 
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="flex-1 bg-stone-100 text-stone-600 font-bold py-4 rounded-xl hover:bg-stone-200 transition-all"
+                    className="px-6 py-3 text-stone-500 font-bold hover:bg-stone-50 rounded-xl transition-all"
                   >
                     Annuler
                   </button>
-                  <button
-                    disabled={loading}
-                    className="flex-1 bg-islamic-green text-white font-bold py-4 rounded-xl hover:bg-islamic-gold transition-all shadow-lg shadow-islamic-green/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                  <button 
+                    type="submit"
+                    className="bg-islamic-green text-white font-bold px-8 py-3 rounded-xl hover:bg-islamic-gold transition-all shadow-lg shadow-islamic-green/20"
                   >
-                    {loading ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
                     Enregistrer
                   </button>
                 </div>
@@ -1086,83 +995,13 @@ export default function Admin() {
         )}
       </AnimatePresence>
 
-      {/* Media Picker Modal */}
-      <AnimatePresence>
-        {isMediaPickerOpen && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsMediaPickerOpen(false)}
-              className="absolute inset-0 bg-stone-900/80 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl relative z-10 overflow-hidden flex flex-col max-h-[85vh]"
-            >
-              <div className="p-6 border-b border-stone-100 flex justify-between items-center bg-stone-50">
-                <h3 className="text-xl font-serif font-bold text-stone-800">Choisir un média</h3>
-                <button onClick={() => setIsMediaPickerOpen(false)} className="text-stone-400 hover:text-stone-600">
-                  <X size={24} />
-                </button>
-              </div>
-              <div className="p-8 overflow-y-auto flex-1">
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                  {mediaFiles.map((file) => {
-                    const url = getPublicUrl(file.name);
-                    return (
-                      <button
-                        key={file.id}
-                        type="button"
-                        onClick={() => {
-                          if (mediaPickerTarget === 'news') {
-                            setNewsForm({ ...newsForm, image_url: url });
-                          } else {
-                            setWidgetsForm({ ...widgetsForm, image_url: url });
-                          }
-                          setIsMediaPickerOpen(false);
-                        }}
-                        className="group relative aspect-square bg-stone-50 rounded-xl overflow-hidden border-2 border-transparent hover:border-islamic-green transition-all"
-                      >
-                        <img
-                          src={url}
-                          alt={file.name}
-                          className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
-                        />
-                        <div className="absolute inset-0 bg-islamic-green/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <CheckCircle2 className="text-white" size={32} />
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Global Status Toast */}
-      <AnimatePresence>
-        {status !== 'idle' && (
-          <motion.div
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 50 }}
-            className={`fixed bottom-8 right-8 z-[200] px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 ${status === 'success' ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'
-              }`}
-          >
-            {status === 'success' ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}
-            <span className="font-bold">
-              {status === 'success' ? 'Opération réussie !' : 'Une erreur est survenue.'}
-            </span>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={handleFileUpload} 
+        className="hidden" 
+        accept="image/*,video/*,audio/*,application/pdf"
+      />
     </div>
   );
 }

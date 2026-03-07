@@ -28,7 +28,7 @@ import { VideoPlaylistPlayer } from '../components/VideoPlaylistPlayer';
 import { SocialFeed } from '../components/SocialFeed';
 
 const Player = () => {
-  const { isPlaying, togglePlay, volume, setVolume, isMuted, setIsMuted, toggleMute, currentTrack, downloadM3U } = usePlayer();
+  const { isPlaying, togglePlay, volume, setVolume, isMuted, setIsMuted, toggleMute, currentTrack, downloadM3U, isBuffering } = usePlayer();
 
   return (
     <div className="glass-card rounded-3xl p-6 md:p-8 max-w-md w-full mx-auto relative overflow-hidden">
@@ -94,9 +94,16 @@ const Player = () => {
           </button>
           <button 
             onClick={togglePlay}
-            className="w-20 h-20 bg-islamic-green text-white rounded-full flex items-center justify-center shadow-xl shadow-islamic-green/20 hover:scale-105 transition-transform active:scale-95"
+            disabled={isBuffering && !isPlaying}
+            className="w-20 h-20 bg-islamic-green text-white rounded-full flex items-center justify-center shadow-xl shadow-islamic-green/20 hover:scale-105 transition-transform active:scale-95 disabled:opacity-50"
           >
-            {isPlaying ? <Pause size={36} fill="currentColor" /> : <Play size={36} fill="currentColor" className="ml-1" />}
+            {isBuffering && !isPlaying ? (
+              <Loader2 className="animate-spin" size={36} />
+            ) : isPlaying ? (
+              <Pause size={36} fill="currentColor" />
+            ) : (
+              <Play size={36} fill="currentColor" className="ml-1" />
+            )}
           </button>
           <button 
             onClick={() => {
@@ -505,7 +512,7 @@ export default function Home() {
                 >
                   <div className="aspect-[4/3] bg-stone-100 rounded-3xl overflow-hidden mb-6 relative">
                     <img 
-                      src={item.image_url || `https://picsum.photos/seed/${item.id}/800/600`} 
+                      src={item.featured_image_url || item.image_url || `https://picsum.photos/seed/${item.id}/800/600`} 
                       alt={item.title} 
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                       referrerPolicy="no-referrer"
@@ -526,7 +533,9 @@ export default function Home() {
                     </div>
                   </div>
                   <h3 className="text-xl font-serif font-bold text-stone-800 group-hover:text-islamic-green transition-colors mb-2">{item.title}</h3>
-                  <p className="text-stone-500 text-sm line-clamp-2 leading-relaxed">{item.content}</p>
+                  <p className="text-stone-500 text-sm line-clamp-2 leading-relaxed">
+                    {item.excerpt || (typeof item.content === 'string' ? item.content : 'Cliquez pour lire la suite...')}
+                  </p>
                 </motion.div>
               ))
             )}

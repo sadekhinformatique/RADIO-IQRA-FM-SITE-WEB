@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Calendar, Tag, Eye, Share2, Clock } from 'lucide-react';
 import { News, supabase } from '../lib/supabase';
 import { CommentSection } from './CommentSection';
+import { BlockRenderer } from './BlockRenderer';
 
 interface NewsModalProps {
   news: News | null;
@@ -105,9 +106,7 @@ export const NewsModal: React.FC<NewsModalProps> = ({ news, isOpen, onClose }) =
                 </div>
 
                 <div className="prose prose-stone max-w-none">
-                  <p className="text-stone-600 text-lg leading-relaxed whitespace-pre-wrap">
-                    {news.content}
-                  </p>
+                  <BlockRenderer blocks={news.content} />
                 </div>
 
                 {/* Comment Section */}

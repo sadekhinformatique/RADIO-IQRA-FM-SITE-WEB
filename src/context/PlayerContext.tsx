@@ -18,18 +18,21 @@ interface PlayerContextType {
   currentTrack: string;
   config: RadioConfig | null;
   downloadM3U: () => void;
+  isBuffering: boolean;
 }
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
 
-export const DEFAULT_STREAM_URL = "https://radioiqrabf-1.ice.infomaniak.ch/radioiqrabf-96.mp3";
-export const DEFAULT_FALLBACK_URL = "https://radioiqrabf-1.ice.infomaniak.ch/radioiqrabf-128.mp3";
+export const DEFAULT_STREAM_URL = "https://radioiqrabf-1.ice.infomaniak.ch/radioiqrabf-128.mp3";
+export const DEFAULT_FALLBACK_URL = "https://radioiqrabf-1.ice.infomaniak.ch/radioiqrabf-96.mp3";
 
 // Install polyfills for Shaka once
 shaka.polyfill.installAll();
 
 export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isAttemptingToPlay, setIsAttemptingToPlay] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
   const [volume, setVolume] = useState(80);
   const [isMuted, setIsMuted] = useState(false);
   const [config, setConfig] = useState<RadioConfig | null>(null);
@@ -120,7 +123,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
     
     audio.load();
-    if (isPlaying) {
+    if (isAttemptingToPlay) {
       const playPromise = audio.play();
       if (playPromise !== undefined) {
         playPromise.catch(e => {
@@ -137,14 +140,30 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!audioRef.current) {
       const audio = new Audio();
       audio.preload = "auto";
+      audio.crossOrigin = "anonymous";
       audioRef.current = audio;
       
-      const onPlay = () => setIsPlaying(true);
-      const onPause = () => setIsPlaying(false);
+      const onPlay = () => {
+        setIsPlaying(true);
+        setIsBuffering(false);
+      };
+      const onPause = () => {
+        setIsPlaying(false);
+        setIsBuffering(false);
+      };
       
       const onError = (e: any) => {
         console.error("Audio element error:", e);
+        setIsBuffering(false);
         handleFallback();
+      };
+
+      const onWaiting = () => setIsBuffering(true);
+      const onPlaying = () => setIsBuffering(false);
+      const onCanPlay = () => {
+        if (isAttemptingToPlay) {
+          audio.play().catch(console.error);
+        }
       };
 
       const onEnded = () => {
@@ -159,6 +178,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       audio.addEventListener('pause', onPause);
       audio.addEventListener('error', onError);
       audio.addEventListener('ended', onEnded);
+      audio.addEventListener('waiting', onWaiting);
+      audio.addEventListener('playing', onPlaying);
+      audio.addEventListener('canplay', onCanPlay);
 
       // Initial source load
       updatePlayerSource(getSourceUrl());
@@ -168,6 +190,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         audio.removeEventListener('pause', onPause);
         audio.removeEventListener('error', onError);
         audio.removeEventListener('ended', onEnded);
+        audio.removeEventListener('waiting', onWaiting);
+        audio.removeEventListener('playing', onPlaying);
+        audio.removeEventListener('canplay', onCanPlay);
         audio.pause();
         audio.src = "";
         if (shakaPlayerRef.current) shakaPlayerRef.current.destroy();
@@ -211,8 +236,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const togglePlay = () => {
     if (audioRef.current) {
       if (isPlaying) {
+        setIsAttemptingToPlay(false);
         audioRef.current.pause();
       } else {
+        setIsAttemptingToPlay(true);
         const playPromise = audioRef.current.play();
         if (playPromise !== undefined) {
           playPromise.catch(e => {
@@ -249,7 +276,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       toggleMute,
       currentTrack,
       config,
-      downloadM3U
+      downloadM3U,
+      isBuffering
     }}>
       {children}
     </PlayerContext.Provider>

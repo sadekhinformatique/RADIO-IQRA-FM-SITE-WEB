@@ -45,48 +45,134 @@ export type ContactMessage = {
   created_at?: string;
 };
 
-export type News = {
+export type Post = {
   id: string;
   title: string;
-  content: string;
-  category?: string;
-  image_url?: string;
-  published_at: string;
+  slug: string;
+  content: any; // JSON for block editor
+  excerpt?: string;
+  status: 'draft' | 'published' | 'private';
+  author_id: string;
+  featured_image_url?: string;
+  category_id?: string;
+  meta_title?: string;
+  meta_description?: string;
+  published_at?: string;
   created_at?: string;
+  updated_at?: string;
   views?: number;
 };
 
-export type Comment = {
+export type Page = {
   id: string;
-  news_id: string;
-  name: string;
-  content: string;
-  created_at: string;
+  title: string;
+  slug: string;
+  content: any; // JSON for block editor
+  status: 'draft' | 'published';
+  featured_image_url?: string;
+  meta_title?: string;
+  meta_description?: string;
+  created_at?: string;
+  updated_at?: string;
 };
 
-export type NewsletterSubscription = {
+export type Category = {
   id: string;
-  email: string;
+  name: string;
+  slug: string;
+  description?: string;
+  parent_id?: string;
+};
+
+export type Tag = {
+  id: string;
+  name: string;
+  slug: string;
+};
+
+export type Media = {
+  id: string;
+  name: string;
+  url: string;
+  type: 'image' | 'video' | 'audio' | 'document';
+  mime_type: string;
+  size: number;
+  folder?: string;
   created_at?: string;
+};
+
+export type UserRole = 'admin' | 'editor' | 'author' | 'subscriber';
+
+export type Profile = {
+  id: string;
+  username: string;
+  full_name?: string;
+  avatar_url?: string;
+  role: UserRole;
+  bio?: string;
+  created_at?: string;
+};
+
+export type SiteSettings = {
+  id: string;
+  site_title: string;
+  site_description: string;
+  logo_url?: string;
+  favicon_url?: string;
+  header_menu_id?: string;
+  footer_menu_id?: string;
+  radio_stream_url?: string;
+  radio_fallback_url?: string;
+  youtube_channel_id?: string;
+  facebook_url?: string;
+  twitter_url?: string;
+  instagram_url?: string;
+  tiktok_url?: string;
+  theme_config: any;
+};
+
+export type Menu = {
+  id: string;
+  name: string;
+  items: MenuItem[];
 };
 
 export type Widget = {
   id: string;
   type: string;
   title: string;
-  content: string;
-  image_url?: string;
+  content: any;
   is_active: boolean;
   order_index: number;
   created_at?: string;
 };
 
-export type RadioConfig = {
+export type Theme = {
   id: string;
-  primary_stream_url: string;
-  fallback_stream_url: string;
-  audio_playlist: { title: string; url: string }[];
-  video_playlist: { title: string; url: string }[];
-  youtube_channel_id?: string;
-  updated_at?: string;
+  name: string;
+  slug: string;
+  config: any;
+  is_active: boolean;
 };
+
+export type MenuItem = {
+  id: string;
+  label: string;
+  url: string;
+  parent_id?: string;
+  order: number;
+};
+
+export type Comment = {
+  id: string;
+  post_id: string;
+  author_name: string;
+  author_email: string;
+  content: string;
+  status: 'pending' | 'approved' | 'spam';
+  parent_id?: string;
+  created_at: string;
+};
+
+export type News = Post; // Alias for compatibility
+export type RadioConfig = SiteSettings; // Alias for compatibility
