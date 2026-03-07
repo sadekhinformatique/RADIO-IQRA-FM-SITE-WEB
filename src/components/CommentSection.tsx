@@ -4,10 +4,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Send, User, Clock, MessageSquare, Loader2 } from 'lucide-react';
 
 interface CommentSectionProps {
-  newsId: string;
+  postId: string;
 }
 
-export const CommentSection: React.FC<CommentSectionProps> = ({ newsId }) => {
+export const CommentSection: React.FC<CommentSectionProps> = ({ postId }) => {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -17,7 +17,7 @@ export const CommentSection: React.FC<CommentSectionProps> = ({ newsId }) => {
 
   useEffect(() => {
     fetchComments();
-  }, [newsId]);
+  }, [postId]);
 
   const fetchComments = async () => {
     try {
@@ -25,7 +25,8 @@ export const CommentSection: React.FC<CommentSectionProps> = ({ newsId }) => {
       const { data, error } = await supabase
         .from('comments')
         .select('*')
-        .eq('news_id', newsId)
+        .eq('post_id', postId)
+        .eq('status', 'approved')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -46,7 +47,7 @@ export const CommentSection: React.FC<CommentSectionProps> = ({ newsId }) => {
       setError(null);
       const { error } = await supabase
         .from('comments')
-        .insert([{ news_id: newsId, name, content }]);
+        .insert([{ post_id: postId, author_name: name, author_email: 'guest@example.com', content, status: 'pending' }]);
 
       if (error) throw error;
 
@@ -146,7 +147,7 @@ export const CommentSection: React.FC<CommentSectionProps> = ({ newsId }) => {
                       <User size={20} />
                     </div>
                     <div>
-                      <h4 className="font-bold text-stone-800">{comment.name}</h4>
+                      <h4 className="font-bold text-stone-800">{comment.author_name}</h4>
                       <div className="flex items-center gap-1.5 text-xs text-stone-400">
                         <Clock size={12} />
                         {new Date(comment.created_at).toLocaleDateString('fr-FR', { 

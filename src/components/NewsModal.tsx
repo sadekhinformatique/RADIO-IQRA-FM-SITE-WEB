@@ -21,11 +21,11 @@ export const NewsModal: React.FC<NewsModalProps> = ({ news, isOpen, onClose }) =
   const incrementViews = async () => {
     if (!news) return;
     try {
-      const { error } = await supabase.rpc('increment_news_views', { news_id: news.id });
+      const { error } = await supabase.rpc('increment_post_views', { post_id: news.id });
       if (error) {
         // Fallback if RPC doesn't exist
         const { error: updateError } = await supabase
-          .from('news')
+          .from('posts')
           .update({ views: (news.views || 0) + 1 })
           .eq('id', news.id);
         if (updateError) throw updateError;
@@ -66,7 +66,7 @@ export const NewsModal: React.FC<NewsModalProps> = ({ news, isOpen, onClose }) =
               {/* Header Image */}
               <div className="relative h-64 sm:h-96 w-full">
                 <img 
-                  src={news.image_url || `https://picsum.photos/seed/${news.id}/1200/800`} 
+                  src={news.featured_image_url || news.image_url || `https://picsum.photos/seed/${news.id}/1200/800`} 
                   alt={news.title}
                   className="w-full h-full object-cover"
                   referrerPolicy="no-referrer"
@@ -81,7 +81,7 @@ export const NewsModal: React.FC<NewsModalProps> = ({ news, isOpen, onClose }) =
                     )}
                     <span className="bg-white/20 backdrop-blur-md text-white px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-2">
                       <Calendar size={14} />
-                      {new Date(news.published_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      {new Date(news.published_at || news.created_at || '').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
                     </span>
                   </div>
                   <h2 className="text-3xl sm:text-4xl font-serif font-bold text-white leading-tight">{news.title}</h2>
@@ -110,7 +110,7 @@ export const NewsModal: React.FC<NewsModalProps> = ({ news, isOpen, onClose }) =
                 </div>
 
                 {/* Comment Section */}
-                <CommentSection newsId={news.id} />
+                <CommentSection postId={news.id} />
               </div>
             </div>
           </motion.div>

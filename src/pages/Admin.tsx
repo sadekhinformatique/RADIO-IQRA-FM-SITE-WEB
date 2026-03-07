@@ -53,6 +53,7 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [mediaFiles, setMediaFiles] = useState<Media[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -114,9 +115,57 @@ export default function Admin() {
     }
   }, [isAuthenticated, activeTab]);
 
+  useEffect(() => {
+    if (editingItem) {
+      if (activeTab === 'posts') {
+        setPostForm({
+          title: editingItem.title || '',
+          slug: editingItem.slug || '',
+          content: editingItem.content || [],
+          status: editingItem.status || 'draft',
+          category_id: editingItem.category_id || '',
+          featured_image_url: editingItem.featured_image_url || ''
+        });
+      } else if (activeTab === 'pages') {
+        setPageForm({
+          title: editingItem.title || '',
+          slug: editingItem.slug || '',
+          content: editingItem.content || [],
+          status: editingItem.status || 'draft',
+          featured_image_url: editingItem.featured_image_url || ''
+        });
+      } else if (activeTab === 'categories') {
+        setCategoryForm({
+          name: editingItem.name || '',
+          slug: editingItem.slug || '',
+          description: editingItem.description || ''
+        });
+      } else if (activeTab === 'tags') {
+        setTagForm({
+          name: editingItem.name || '',
+          slug: editingItem.slug || ''
+        });
+      } else if (activeTab === 'settings') {
+        setSettingsForm(editingItem);
+      }
+    } else {
+      // Reset forms when not editing
+      setPostForm({ title: '', slug: '', content: [], status: 'draft', category_id: '', featured_image_url: '' });
+      setPageForm({ title: '', slug: '', content: [], status: 'draft' });
+      setCategoryForm({ name: '', slug: '', description: '' });
+      setTagForm({ name: '', slug: '' });
+    }
+  }, [editingItem, activeTab]);
+
   const fetchData = async () => {
     setLoading(true);
     try {
+      // Fetch categories if we are in posts tab or categories tab
+      if (activeTab === 'posts' || activeTab === 'categories') {
+        const { data: cats } = await supabase.from('categories').select('*').order('name');
+        setCategories(cats || []);
+      }
+
       let table = '';
       if (activeTab === 'posts') table = 'posts';
       else if (activeTab === 'pages') table = 'pages';
@@ -236,6 +285,9 @@ export default function Admin() {
       } else if (activeTab === 'settings') {
         table = 'site_settings';
         formData = settingsForm;
+      } else if (activeTab === 'comments') {
+        table = 'comments';
+        formData = editingItem; // Just use the editingItem directly for simplicity if it's a comment
       }
 
       if (editingItem) {
@@ -444,7 +496,7 @@ export default function Admin() {
               <table className="w-full text-left">
                 <thead>
                   <tr className="bg-stone-50 text-stone-400 text-[10px] font-bold uppercase tracking-widest">
-                    <th className="px-6 py-4">Titre / Nom</th>
+                    <th className="px-6 py-4">{activeTab === 'comments' ? 'Auteur / Message' : 'Titre / Nom'}</th>
                     {activeTab === 'posts' && <th className="px-6 py-4">Auteur</th>}
                     {activeTab === 'posts' && <th className="px-6 py-4">Catégorie</th>}
                     <th className="px-6 py-4">Statut</th>
@@ -468,8 +520,12 @@ export default function Admin() {
                               </div>
                             )}
                             <div>
-                              <p className="font-bold text-stone-800">{item.title || item.name || item.username}</p>
-                              <p className="text-xs text-stone-400 italic">/{item.slug || ''}</p>
+                              <p className="font-bold text-stone-800">
+                                {activeTab === 'comments' ? item.author_name : (item.title || item.name || item.username)}
+                              </p>
+                              <p className="text-xs text-stone-400 italic">
+                                {activeTab === 'comments' ? item.content : `/${item.slug || ''}`}
+                              </p>
                             </div>
                           </div>
                         </td>
@@ -477,7 +533,7 @@ export default function Admin() {
                         {activeTab === 'posts' && <td className="px-6 py-4 text-sm text-stone-600">Actualités</td>}
                         <td className="px-6 py-4">
                           <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
-                            item.status === 'published' ? 'bg-green-50 text-green-600' : 'bg-stone-100 text-stone-500'
+                            (item.status === 'published' || item.status === 'approved') ? 'bg-green-50 text-green-600' : 'bg-stone-100 text-stone-500'
                           }`}>
                             {item.status || 'Actif'}
                           </span>
@@ -487,6 +543,19 @@ export default function Admin() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {activeTab === 'comments' && item.status === 'pending' && (
+                              <button 
+                                onClick={async () => {
+                                  const { error } = await supabase.from('comments').update({ status: 'approved' }).eq('id', item.id);
+                                  if (error) showStatus('error', 'Erreur lors de l\'approbation');
+                                  else { showStatus('success', 'Commentaire approuvé'); fetchData(); }
+                                }}
+                                className="p-2 text-stone-400 hover:text-green-500 hover:bg-green-50 rounded-lg transition-all"
+                                title="Approuver"
+                              >
+                                <CheckCircle2 size={16} />
+                              </button>
+                            )}
                             <button 
                               onClick={() => { setEditingItem(item); setIsModalOpen(true); }}
                               className="p-2 text-stone-400 hover:text-islamic-green hover:bg-islamic-green/10 rounded-lg transition-all"
@@ -884,10 +953,15 @@ export default function Admin() {
                   {activeTab === 'posts' && (
                     <div>
                       <label className="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Catégorie</label>
-                      <select className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none">
-                        <option>Actualités</option>
-                        <option>Émissions</option>
-                        <option>Coran</option>
+                      <select 
+                        className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                        value={postForm.category_id}
+                        onChange={(e) => setPostForm({ ...postForm, category_id: e.target.value })}
+                      >
+                        <option value="">Sélectionner une catégorie</option>
+                        {categories.map(cat => (
+                          <option key={cat.id} value={cat.id}>{cat.name}</option>
+                        ))}
                       </select>
                     </div>
                   )}

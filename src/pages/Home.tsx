@@ -296,9 +296,10 @@ export default function Home() {
     const fetchNews = async () => {
       try {
         const { data, error } = await supabase
-          .from('news')
+          .from('posts')
           .select('*')
-          .order('published_at', { ascending: false })
+          .eq('status', 'published')
+          .order('created_at', { ascending: false })
           .limit(3);
         if (error) throw error;
         setNews(data || []);
